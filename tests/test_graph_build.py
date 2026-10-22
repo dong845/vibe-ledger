@@ -1,0 +1,179 @@
+import json
+
+import graph
+
+NO_PROBES = {"findings": []}
+
+
+def write(root, rel, text=""):
+    p = root / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(text, encoding="utf-8")
+    return p
+
+
+def test_entries_for_each_stack(tmp_path):
+    write(tmp_path, "app/page.tsx", "export default function P() {}")
+    write(tmp_path, "app/api/chat/route.ts", "export async function POST() {}")
+    write(tmp_path, "pages/_app.tsx")
+    write(tmp_path, "pages/about.tsx")
+    write(tmp_path, "manifest.json", json.dumps({
+        "manifest_version": 3, "background": {"service_worker": "src/background.js"},
+        "content_scripts": [{"js": ["src/content.js"]}], "side_panel": {"default_path": "src/panel/panel.html"}}))
+    write(tmp_path, "src/background.js")
+    write(tmp_path, "src/content.js")
+    write(tmp_path, "src/panel/panel.html", '<script type="module" src="panel.js"></script>')
+    write(tmp_path, "src/panel/panel.js")
+    write(tmp_path, "index.html", '<script type="module" src="/src/main.ts"></script><script src="https://cdn.example/x.js"></script>')
+    write(tmp_path, "src/main.ts")
+    write(tmp_path, "package.json", json.dumps({"main": "./server/index.js", "bin": {"tool": "bin/cli.js"},
+                                                "dependencies": {"next": "15.0.0"}}))
+    write(tmp_path, "server/index.js", "app.listen(3000);")
+    write(tmp_path, "bin/cli.js")
+    write(tmp_path, "worker.js", "server.listen(8080);")
+    write(tmp_path, "tools/run.py", 'if __name__ == "__main__":\n    main()\n')
+    write(tmp_path, "app.py")
+    files, _ = graph.collect_files(tmp_path)
+    entries = graph.find_entries(tmp_path, files)
+    assert set(entries) == {"app/page.tsx", "app/api/chat/route.ts", "pages/about.tsx", "src/background.js",
+                            "src/content.js", "src/panel/panel.js", "src/main.ts", "server/index.js", "bin/cli.js",
+                            "worker.js", "tools/run.py", "app.py"}
+    assert entries["src/panel/panel.js"] == "manifest side panel → src/panel/panel.html"
+    assert entries["server/index.js"] == "package.json main"
+    assert entries["worker.js"] == "starts a server (.listen)"
+
+
+def test_pages_folder_is_ordinary_code_outside_nextjs(tmp_path):
+    write(tmp_path, "index.html", '<script type="module" src="/src/main.tsx"></script>')
+    write(tmp_path, "src/main.tsx", 'import "./pages/home";\n')
+    write(tmp_path, "src/pages/home.tsx", "export default function Home() {}\n")
+    write(tmp_path, "app/page.tsx", "export default function P() {}\n")
+    write(tmp_path, "package.json", json.dumps({"dependencies": {"react": "18.3.1"}}))
+    files, _ = graph.collect_files(tmp_path)
+    assert graph.find_entries(tmp_path, files) == {"src/main.tsx": "index.html script"}
+    write(tmp_path, "next.config.mjs", "export default {};\n")
+    assert set(graph.find_entries(tmp_path, files)) == {"src/main.tsx", "src/pages/home.tsx", "app/page.tsx"}
+
+
+def test_build_edges_unresolved_and_fallback_entries(tmp_path):
+    write(tmp_path, "src/a.ts", 'import { run } from "./b";\nimport x from "./missing";\n')
+    write(tmp_path, "src/b.ts", "export function run() {}\n")
+    g = graph.build(tmp_path, [], NO_PROBES)
+    assert g["edges"] == [{"from": "src/a.ts", "to": "src/b.ts", "line": 1, "names": ["run"]}]
+    assert g["unresolved"] == [{"from": "src/a.ts", "spec": "./missing", "line": 2}]
+    assert g["entries"] == [{"path": "src/a.ts", "reason": "not imported by any file"}]
+    nodes = {n["id"]: n for n in g["nodes"]}
+    assert nodes["src/a.ts"]["role"] == "entry" and nodes["src/b.ts"]["role"] == "logic"
+    assert nodes["src/b.ts"]["exports"] == [{"name": "run", "line": 1}]
+    assert g["languages"] == ["js"] and g["collapsed"] is False
+
+
+def test_import_cycles_are_kept_and_self_imports_dropped(tmp_path):
+    write(tmp_path, "src/a.ts", 'import { b } from "./b";\nexport const a = 1;\n')
+    write(tmp_path, "src/b.ts", 'import { a } from "./a";\nexport const b = 2;\n')
+    write(tmp_path, "src/self.ts", 'import "./self";\n')
+    g = graph.build(tmp_path, [], NO_PROBES)
+    assert {(e["from"], e["to"]) for e in g["edges"]} == {("src/a.ts", "src/b.ts"), ("src/b.ts", "src/a.ts")}
+    assert g["entries"] == [{"path": "src/self.ts", "reason": "not imported by any file"}]
+
+
+def test_externals_from_packages_urls_and_storage(tmp_path):
+    write(tmp_path, "src/ai.ts", 'import OpenAI from "openai";\nimport { createClient } from "@supabase/supabase-js";\n'
+                                 'import _ from "lodash";\nconst r = await fetch("https://api.anthropic.com/v1/messages");\n'
+                                 'localStorage.setItem("k", "v");\nimport { getApp } from "firebase/app";\n')
+    write(tmp_path, "src/db.py", "import sqlite3\nimport requests\n")
+    g = graph.build(tmp_path, [], NO_PROBES)
+    ext = {e["id"]: e for e in g["externals"]}
+    assert set(ext) == {"ext:openai", "ext:supabase", "ext:anthropic", "ext:local-storage", "ext:firebase", "ext:sqlite"}
+    assert ext["ext:openai"]["kind"] == "paid" and ext["ext:supabase"]["kind"] == "data"
+    assert ext["ext:anthropic"]["evidence"] == [
+        {"path": "src/ai.ts", "line": 4, "snippet": 'const r = await fetch("https://api.anthropic.com/v1/messages");'}]
+    edges = {(e["from"], e["to"]) for e in g["edges"]}
+    assert ("src/ai.ts", "ext:openai") in edges and ("src/db.py", "ext:sqlite") in edges
+    assert all(not e["to"].startswith("ext:lodash") for e in g["edges"])
+
+
+def test_exports_js_and_python():
+    js = ("export default function Home() {}\nexport async function load() {}\nexport const API = 1;\n"
+          "export class Store {}\nconst a = 1, b = 2;\nexport { a, b as bee };\nexports.legacy = () => 1;\n"
+          "module.exports = { one, two };\nexport { helper } from './helper';\n")
+    assert [(e["name"], e["line"]) for e in graph.exports(js, "js")] == [
+        ("Home", 1), ("load", 2), ("API", 3), ("Store", 4), ("a", 6), ("bee", 6), ("legacy", 7), ("one", 8), ("two", 8)]
+    py = "def run():\n    pass\nclass Store:\n    def method(self): pass\ndef _private(): pass\nasync def fetch(): pass\n"
+    assert [(e["name"], e["line"]) for e in graph.exports(py, "py")] == [("run", 1), ("Store", 3), ("fetch", 6)]
+
+
+def test_large_project_collapses_into_folders(tmp_path):
+    for d in ("src/ai", "src/ui", "src/db", "src/util"):
+        for i in range(40):
+            write(tmp_path, f"{d}/f{i}.ts")
+    write(tmp_path, "src/main.ts")
+    g = graph.build(tmp_path, [], NO_PROBES)
+    assert g["collapsed"] is True
+    assert [f["id"] for f in g["folders"]] == ["src/ai", "src/db", "src/ui", "src/util"]
+    assert all(len(f["files"]) == 40 for f in g["folders"])
+    assert "src/main.ts" not in {x for f in g["folders"] for x in f["files"]}
+
+
+def test_folder_groups_skip_single_file_groups():
+    paths = ["a/x.ts", "a/y.ts", "b/z.ts", "c/w.ts", "c/v.ts", "root.ts"]
+    assert graph.folder_groups(paths) == [{"id": "a", "files": ["a/x.ts", "a/y.ts"]},
+                                          {"id": "c", "files": ["c/v.ts", "c/w.ts"]}]
+
+
+def test_scores_and_explain_selection(tmp_path):
+    write(tmp_path, "index.html", '<script type="module" src="/src/main.ts"></script>')
+    write(tmp_path, "src/main.ts", 'import "./ai";\nimport "./util";\n')
+    write(tmp_path, "src/ai.ts", 'import OpenAI from "openai";\nimport "./util";\n')
+    write(tmp_path, "src/util.ts")
+    write(tmp_path, "src/lonely.ts")
+    probes = {"findings": [{"path": "src/ai.ts", "level": "certain", "message": "m", "line": 1},
+                           {"path": "src/util.ts", "level": "hint", "message": "m", "line": 1}]}
+    recs = [{"kind": "edit", "files": [str(tmp_path / "src/util.ts")], "ts": f"2026-09-12T09:0{i}:00Z"} for i in range(6)]
+    g = graph.build(tmp_path, recs, probes)
+    nodes = {n["id"]: n for n in g["nodes"]}
+    assert {k: v["score"] for k, v in nodes.items()} == {"src/main.ts": 3, "src/ai.ts": 6, "src/util.ts": 5, "src/lonely.ts": 0}
+    assert {k for k, v in nodes.items() if v["explain"]} == {"src/main.ts", "src/ai.ts", "src/util.ts"}
+    assert nodes["src/util.ts"]["edits"] == {"count": 6, "first": "2026-09-12T09:00:00Z", "last": "2026-09-12T09:05:00Z"}
+    assert nodes["src/lonely.ts"]["edits"] is None
+
+
+def test_explain_pack_lists_files_and_groups(tmp_path):
+    write(tmp_path, "src/main.ts", "".join(f'import "./m{i}";\n' for i in range(10)))
+    for i in range(10):
+        write(tmp_path, f"src/m{i}.ts", f"export function f{i}() {{}}\n")
+    g = graph.build(tmp_path, [], NO_PROBES)
+    pack = graph.explain_pack(g, tmp_path, NO_PROBES)
+    assert "## Group 2 → parts/explain_02.json" in pack and "### src/main.ts" in pack
+    assert "- exports: f3 (line 1)" in pack and "- used by: src/main.ts" in pack
+    write(tmp_path / "small", "main.ts", 'import "./a";\n')
+    write(tmp_path / "small", "a.ts", "export const a = 1;\n")
+    small = graph.build(tmp_path / "small", [], NO_PROBES)
+    assert "Group" not in graph.explain_pack(small, tmp_path / "small", NO_PROBES)
+
+
+def test_explain_pack_asks_for_journeys_from_the_entry_points(tmp_path):
+    write(tmp_path, "index.html", '<script type="module" src="/src/main.ts"></script>')
+    write(tmp_path, "src/main.ts", 'import "./a";\n')
+    write(tmp_path, "src/a.ts", "export const a = 1;\n")
+    g = graph.build(tmp_path, [], NO_PROBES)
+    pack = graph.explain_pack(g, tmp_path, NO_PROBES)
+    assert "## Journeys" in pack and "- src/main.ts (index.html script)" in pack and "after `vl.py merge`" not in pack
+    write(tmp_path / "many", "src/main.ts", "".join(f'import "./m{i}";\n' for i in range(10)))
+    for i in range(10):
+        write(tmp_path / "many", f"src/m{i}.ts", f"export function f{i}() {{}}\n")
+    many = graph.explain_pack(graph.build(tmp_path / "many", [], NO_PROBES), tmp_path / "many", NO_PROBES)
+    assert "after `vl.py merge`" in many
+
+
+def test_an_oversized_folder_group_is_split_further(tmp_path):
+    for sub in ("a", "b", "c", "d"):
+        for i in range(35):
+            write(tmp_path, f"src/{sub}/f{i}.ts")
+    write(tmp_path, "docs/x.ts")
+    write(tmp_path, "scripts/y.ts")
+    g = graph.build(tmp_path, [], NO_PROBES)
+    assert g["collapsed"] is True
+    assert [f["id"] for f in g["folders"]] == ["src/a", "src/b", "src/c", "src/d"]  # not one 140-file "src"
+    flat = ["solo/f%d.ts" % i for i in range(60)] + ["one/x.ts", "two/y.ts"]
+    assert [f["id"] for f in graph.folder_groups(flat)] == ["solo"]  # nothing below it to split into: kept whole

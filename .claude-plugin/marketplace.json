@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "vibe-ledger",
+  "owner": {"name": "dong845"},
+  "metadata": {"description": "vibe-ledger skill — understand and check an AI-built app from its own conversations", "version": "0.2.0"},
+  "plugins": [{
+    "name": "vibe-ledger",
+    "source": "./",
+    "description": "Turns the promises in your AI coding conversations into a verified ledger and an offline report with diagrams.",
+    "version": "0.2.0",
+    "author": {"name": "dong845"},
+    "license": "MIT",
+    "category": "productivity"
+  }]
+}
