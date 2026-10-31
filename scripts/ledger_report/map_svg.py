@@ -108,10 +108,11 @@ def render_map(ledger: dict, lang: str) -> str:
            '<path class="arrowhead" d="M0,0 L8,4 L0,8 z"/></marker>'
            '<marker id="arrow-map-risk" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto">'
            '<path class="arrowhead risk" d="M0,0 L8,4 L0,8 z"/></marker></defs>']
+    own = m.get("lane_labels") or {}
     for i, lane in enumerate(LANES):
         x = LANE_X[i]
         out.append(f'<rect class="lane" x="{x - 6}" y="12" width="{LANE_W + 12}" height="{height - 40}" rx="14"/>')
-        out.append(f'<text class="lane-title" x="{x + LANE_W / 2:.1f}" y="40" text-anchor="middle">{h(t(lang, "lane_" + lane))}</text>')
+        out.append(f'<text class="lane-title" x="{x + LANE_W / 2:.1f}" y="40" text-anchor="middle">{h(own.get(lane) or t(lang, "lane_" + lane))}</text>')
     labels = []
     detour = TOP + used["server"] * (NODE_H + GAP) - GAP / 2 + 6 if used["server"] else None
     for e in m["edges"]:

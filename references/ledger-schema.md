@@ -32,6 +32,7 @@
 
 ## map
 
+`lane_labels` (optional): `{browser|server|storage: text}` renames a lane for a project that is not a web app — a CLI or a pipeline names them, e.g. "你运行的脚本" / "本机处理".
 `nodes`: `id`, `lane` (`browser`, `server`, `storage`), `kind` (`page`, `route`, `function`, `database`, `storage`, `third_party`, `client`), `label`, `holds` (data names), `paid` (true when it charges per use), `evidence`.
 `edges`: `from`, `to`, `carries` (what data), `risk` (short text or `null`), `evidence`.
 

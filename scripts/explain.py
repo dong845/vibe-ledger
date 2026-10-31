@@ -21,14 +21,15 @@ JS_DEFS = [
 ]
 # a name that is given a value: it is a definition only when that value is a function (see _is_function_value)
 VALUE_HEADS = [
-    re.compile(rf"^[ \t]*(?:export[ \t]+)?(?:declare[ \t]+)?(?:const|let|var)[ \t]+({_ID})[ \t]*(?::[^=\n]+)?=(?![=>])", re.M),
+    # the type annotation (`: React.FC<{…}>`, possibly over several lines) is skipped by _after_assign
+    re.compile(rf"^[ \t]*(?:export[ \t]+)?(?:declare[ \t]+)?(?:const|let|var)[ \t]+({_ID})[ \t]*(?=[:=])", re.M),
     re.compile(rf"^[ \t]*({_ID})[ \t]*:(?!:)", re.M),  # object member
     re.compile(rf"^[ \t]*{_MODS}({_ID})[ \t]*(?::[^=\n]+)?=(?![=>])", re.M),  # class property
 ]
-_FN_START = re.compile(rf"[ \t]*(?:async[ \t]*)?(?:function\b|{_ID}[ \t]*=>)")
-_FN_WRAPPER = re.compile(r"[ \t]*(?:React\.)?(?:useCallback|memo|forwardRef|useEvent|debounce|throttle)[ \t]*\(")
-_ARROW_PARAMS = re.compile(r"[ \t]*(?:async[ \t]*)?(?:<[^>\n]*>[ \t]*)?\(")
-_ARROW_TAIL = re.compile(r"\s*(?::[^=;{}]+)?=>")
+_FN_START = re.compile(rf"\s*(?:async[ \t]*)?(?:function\b|{_ID}[ \t]*=>)")
+_FN_WRAPPER = re.compile(r"\s*(?:React\.)?(?:useCallback|memo|forwardRef|useEvent|debounce|throttle)[ \t]*\(")
+_ARROW_PARAMS = re.compile(r"\s*(?:async[ \t]*)?(?:<[^>\n]*>[ \t]*)?\(")
+_ARROW_TAIL = re.compile(r"\s*=>")
 # a method: (modifiers) name<T>(params, maybe over several lines) (: ReturnType)? {
 METHOD_HEAD = re.compile(rf"^[ \t]*{_MODS}\*?[ \t]*({_ID})[ \t]*(?:<[^>\n]*>)?[ \t]*\(", re.M)
 METHOD_BODY = re.compile(r"\s*(?::[^;{=]+)?\{")
@@ -127,15 +128,60 @@ def find_definitions(text: str, lang: str) -> dict[str, list[int]]:
                 continue
             found.setdefault(name, set()).add(clean.count("\n", 0, m.start(1)) + 1)
     if lang != "py":
-        for rx in VALUE_HEADS:
+        for i, rx in enumerate(VALUE_HEADS):
             for m in rx.finditer(clean):
-                if m.group(1) not in NOT_A_DEFINITION and _is_function_value(clean, m.end()):
+                # only `const|let|var name` stops before its `: Type =`; the others end past their `:`/`=`
+                start = _after_assign(clean, m.end()) if i == 0 else m.end()
+                if start > 0 and m.group(1) not in NOT_A_DEFINITION and _is_function_value(clean, start):
                     found.setdefault(m.group(1), set()).add(clean.count("\n", 0, m.start(1)) + 1)
         for m in METHOD_HEAD.finditer(clean):  # a call such as doThing(1); is not followed by a body
             name, close = m.group(1), _closing_paren(clean, m.end() - 1)
             if name not in NOT_A_DEFINITION and close > 0 and METHOD_BODY.match(clean, close + 1):
                 found.setdefault(name, set()).add(clean.count("\n", 0, m.start(1)) + 1)
     return {name: sorted(lines) for name, lines in found.items()}
+
+
+_OPEN, _CLOSE = "([{<", ")]}>"
+
+
+def _skip_type(text: str, pos: int, stop: str) -> int:
+    """From a `:` at text[pos], skip a TypeScript type — brackets and generics matched, so it may span
+    lines and hold `{a: number; b = …}` or `(e: E) => void` — and return the index of the first
+    top-level `=` (stop="=", not `==`/`=>`) or `=>` (stop="=>"), or -1."""
+    depth, j, end = 0, pos + 1, min(len(text), pos + 4000)
+    while j < end:
+        if text.startswith("=>", j):
+            if depth == 0 and stop == "=>":
+                return j
+            j += 2
+            continue
+        c = text[j]
+        if c in _OPEN:
+            depth += 1
+        elif c in _CLOSE:
+            if depth == 0:
+                return -1
+            depth -= 1
+        elif depth == 0 and c == ";":
+            return -1
+        elif depth == 0 and c == "=" and stop == "=" and not text.startswith("==", j):
+            return j
+        j += 1
+    return -1
+
+
+def _after_assign(text: str, pos: int) -> int:
+    """Index just after the `=` of `name[: Type] =` whose name ends at text[pos], or -1."""
+    j = pos
+    while j < len(text) and text[j] in " \t":
+        j += 1
+    if j < len(text) and text[j] == ":":
+        j = _skip_type(text, j, "=")
+        if j < 0:
+            return -1
+    if text.startswith("=", j) and not text.startswith(("==", "=>"), j):
+        return j + 1
+    return -1
 
 
 def _is_function_value(text: str, pos: int) -> bool:
@@ -147,7 +193,14 @@ def _is_function_value(text: str, pos: int) -> bool:
     if not m:
         return False
     close = _closing_paren(text, m.end() - 1)
-    return close > 0 and bool(_ARROW_TAIL.match(text, close + 1))
+    if close < 0:
+        return False
+    after = close + 1
+    while after < len(text) and text[after] in " \t\r\n":
+        after += 1
+    if text.startswith(":", after):  # a return type, possibly an object type over several lines
+        return _skip_type(text, after, "=>") > 0
+    return bool(_ARROW_TAIL.match(text, after))
 
 
 def _closing_paren(text: str, i: int) -> int:

@@ -44,7 +44,7 @@ For each real compromise: `error` = the error's transcript evidence; `change` = 
 
 ## 5. Map (diagram A)
 
-Nodes go in three lanes: `browser` (pages, client code), `server` (routes, server functions), `storage` (databases, file storage and outside services). Kinds: `page`, `route`, `function`, `database`, `storage`, `third_party`, `client`. Set `paid: true` for services that charge per use (AI APIs, SMS, email, payments). Edges say what data moves (`carries`) and, when it is risky, why (`risk`, a few words). Every node and edge needs code or probe evidence — the route probe's `fact` findings are good evidence for route nodes. Keep it to the parts that matter: at most 12 nodes are drawn.
+Nodes go in three lanes: `browser` (pages, client code), `server` (routes, server functions), `storage` (databases, file storage and outside services). Kinds: `page`, `route`, `function`, `database`, `storage`, `third_party`, `client`. Set `paid: true` for services that charge per use (AI APIs, SMS, email, payments). Edges say what data moves (`carries`) and, when it is risky, why (`risk`, a few words). Every node and edge needs code or probe evidence — the route probe's `fact` findings are good evidence for route nodes. Keep it to the parts that matter: at most 12 nodes are drawn. When the project is not a web app (a command-line tool, a pipeline, a desktop app), set `lane_labels` so the lanes say what they are — e.g. `{"browser": "你运行的脚本", "server": "本机处理"}`; a lane called "browser" on a CLI misleads.
 
 ## 6. Access (diagram B)
 

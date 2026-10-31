@@ -118,3 +118,11 @@ def test_edge_label_text_sits_above_its_line():
     node_centres = {map_svg.TOP + map_svg.NODE_H / 2 + i * (map_svg.NODE_H + map_svg.GAP) for i in range(3)}
     for y in label_ys:
         assert all(not (c - 4 < y < c + 12) for c in node_centres), y
+
+
+def test_map_lane_labels_replace_the_web_app_titles():
+    led = sample()
+    led["map"]["lane_labels"] = {"browser": "你运行的脚本", "server": "本机处理"}
+    svg = svg_part(map_svg.render_map(led, "zh"))
+    assert "你运行的脚本" in svg and "本机处理" in svg and "存储与第三方服务" in svg
+    assert "浏览器" not in svg and "你的服务器" not in svg

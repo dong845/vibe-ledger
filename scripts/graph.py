@@ -348,6 +348,11 @@ EXT_URLS = [
     (re.compile(r"https?://generativelanguage\.googleapis\.com"), ("google-ai", "Google AI API", "paid")),
     (re.compile(r"https?://api\.stripe\.com"), ("stripe", "Stripe", "paid")),
     (re.compile(r"https?://api\.elevenlabs\.io"), ("elevenlabs", "ElevenLabs API", "paid")),
+    (re.compile(r"https?://api\.minimaxi?\.(?:io|chat|com)"), ("minimax", "MiniMax API", "paid")),
+    (re.compile(r"https?://api\.moonshot\.(?:cn|ai)"), ("moonshot", "Moonshot (Kimi) API", "paid")),
+    (re.compile(r"https?://dashscope(?:-intl)?\.aliyuncs\.com"), ("dashscope", "Alibaba DashScope (Qwen) API", "paid")),
+    (re.compile(r"https?://api\.groq\.com"), ("groq", "Groq API", "paid")),
+    (re.compile(r"https?://api\.mistral\.ai"), ("mistral", "Mistral API", "paid")),
     (re.compile(r"https?://[\w-]+\.supabase\.co"), ("supabase", "Supabase", "data")),
 ]
 STORAGE_APIS = [
@@ -628,7 +633,18 @@ def build(root, recs, probes) -> dict:
     # files really depend on the file, then by how often it was edited — not by name
     def rank(n):
         return (-n["score"], -indeg[n["id"]], -((n["edits"] or {}).get("count", 0)), n["id"])
-    for n in sorted((n for n in nodes if n["score"] > 0), key=rank)[:EXPLAIN_MAX]:
+    ranked = sorted((n for n in nodes if n["score"] > 0), key=rank)
+    # no one folder takes more than half the slots while other folders have candidates
+    # (every script in a scripts/ folder is an entry and would otherwise fill them all);
+    # slots nobody else can use go back to the ranking
+    cap, per_folder, chosen = -(-EXPLAIN_MAX // 2), Counter(), []
+    for n in ranked:
+        if len(chosen) < EXPLAIN_MAX and per_folder[n["folder"]] < cap:
+            chosen.append(n)
+            per_folder[n["folder"]] += 1
+    picked = {id(n) for n in chosen}
+    chosen += [n for n in ranked if id(n) not in picked][:EXPLAIN_MAX - len(chosen)]
+    for n in chosen:
         n["explain"] = True
     collapsed = len(nodes) > FOLDER_THRESHOLD
     return {"nodes": nodes,

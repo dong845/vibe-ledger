@@ -179,7 +179,8 @@ def verify_ledger(led: dict, index: dict, root, probes: dict) -> dict:
     for e in out["map"]["edges"]:
         drawn = e["from"] in good_ids and e["to"] in good_ids and strong(e.get("evidence", []))
         (edges if drawn else bad_edges).append(e)
-    out["map"] = {"nodes": nodes, "edges": edges, "unverified_nodes": bad_nodes, "unverified_edges": bad_edges}
+    out["map"] = {"nodes": nodes, "edges": edges, "unverified_nodes": bad_nodes, "unverified_edges": bad_edges,
+                  "lane_labels": dict(out["map"].get("lane_labels") or {})}
 
     resources = out["access"]["resources"]
     for r in resources:

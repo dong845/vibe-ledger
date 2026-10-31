@@ -69,6 +69,8 @@ def test_optional_sections_may_be_missing():
     (lambda L: L["access"]["resources"][0]["cells"].update(admin={"read": "allow", "write": "deny", "evidence": []}), "subject"),
     (lambda L: L["access"]["resources"][0]["cells"]["owner"].update(read="yes"), "read"),
     (lambda L: L["paths"][0]["steps"][0].update(evidence=["E2"]), "one evidence id"),
+    (lambda L: L["map"].update(lane_labels={"cloud": "x"}), "lane_labels"),
+    (lambda L: L["map"].update(lane_labels={"browser": ""}), "lane_labels"),
 ])
 def test_each_problem_is_reported(mutate, needle):
     led = minimal()
@@ -141,3 +143,9 @@ def test_a_path_without_action_is_named_by_position():
     with pytest.raises(ledger.LedgerError) as exc:
         ledger.validate(led)
     assert any(p.startswith("path #2: missing action") for p in exc.value.problems), exc.value.problems
+
+
+def test_lane_labels_are_optional_and_accepted():
+    led = minimal()
+    led["map"]["lane_labels"] = {"browser": "你运行的脚本", "server": "本机处理"}
+    ledger.validate(led)

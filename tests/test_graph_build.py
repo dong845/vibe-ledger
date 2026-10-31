@@ -229,3 +229,42 @@ def test_explain_selection_breaks_score_ties_by_real_fan_in(tmp_path):
     nodes = {n["id"]: n for n in g["nodes"]}
     assert nodes["src/a_minor.ts"]["score"] == nodes["src/z_core.ts"]["score"]
     assert [k for k, v in nodes.items() if v["explain"]] == ["src/z_core.ts"]
+
+
+def test_explain_selection_keeps_one_folder_to_half_the_slots(tmp_path):
+    # every script is an entry, so a scripts/ folder would take every slot; the
+    # selection keeps room for the other half of the project
+    for i in range(8):  # each script is an entry AND imported by the next: they outrank web/
+        write(tmp_path, f"scripts/s{i}.py", f'import s{(i + 1) % 8}\nif __name__ == "__main__":\n    pass\n')
+    write(tmp_path, "web/core.ts")
+    write(tmp_path, "web/util.ts")
+    for i in range(3):
+        write(tmp_path, f"web/page{i}.ts", 'import "./core";\nimport "./util";\n')
+    import graph as gmod
+    old = gmod.EXPLAIN_MAX
+    gmod.EXPLAIN_MAX = 4
+    try:
+        g = graph.build(tmp_path, [], NO_PROBES)
+        chosen = [n["id"] for n in g["nodes"] if n["explain"]]
+        assert sum(c.startswith("scripts/") for c in chosen) == 2 and len(chosen) == 4
+        # with nothing else to pick, the cap gives the slots back
+        for p in list(tmp_path.joinpath("web").iterdir()):
+            p.unlink()
+        g = graph.build(tmp_path, [], NO_PROBES)
+        assert sum(n["explain"] for n in g["nodes"]) == 4
+    finally:
+        gmod.EXPLAIN_MAX = old
+
+
+def test_paid_ai_hosts_beyond_the_us_majors(tmp_path):
+    write(tmp_path, "tts.py", 'INTL = "https://api.minimax.io/v1/t2a_v2"\nCN = "https://api.minimax.chat/v1/t2a_v2"\n')
+    write(tmp_path, "chat.py", 'URL = "https://api.moonshot.cn/v1/chat/completions"\n'
+                              'QWEN = "https://dashscope.aliyuncs.com/api/v1"\n')
+    write(tmp_path, "fast.ts", 'fetch("https://api.groq.com/openai/v1/chat/completions")\n'
+                               'fetch("https://api.mistral.ai/v1/chat/completions")\n')
+    g = graph.build(tmp_path, [], NO_PROBES)
+    ext = {e["id"]: e["kind"] for e in g["externals"]}
+    assert ext == {"ext:minimax": "paid", "ext:moonshot": "paid", "ext:dashscope": "paid",
+                   "ext:groq": "paid", "ext:mistral": "paid"}
+    tts = next(e for e in g["externals"] if e["id"] == "ext:minimax")
+    assert [(ev["path"], ev["line"]) for ev in tts["evidence"]] == [("tts.py", 1)]  # first hit per file

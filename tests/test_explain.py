@@ -269,3 +269,36 @@ def test_typescript_definitions_are_recognised():
                        ("refresh", 14), ("update", 16), ("run", 22), ("sum", 23)):
         assert defs.get(name) == [line], (name, defs.get(name))
     assert "doThing" not in defs and "if" not in defs
+
+
+TSX_TYPED = '''export const Plane: React.FC<{
+  depth?: number;
+  drift?: (t: number) => number;
+}> = ({depth = 0}) => {
+  return null;
+};
+export const Caret: React.FC<{color?: string; h?: number}> =
+  ({color, h = 26}) => null;
+export const projectPose = (
+  pose: Pose, cam: Pose,
+): {x: number; y: number; behind: boolean} => {
+  return {x: 0, y: 0, behind: false};
+};
+export const emphBoxes = (lay: KLayout | null, ai = 0): {line: number; left: number;
+  bottom: number}[] => [];
+const handler: (e: Event) => void = (e) => {};
+export const Wrapped: React.FC<Props> = React.memo(Inner);
+const LIMITS: Record<string, number> = {a: 1};
+const total: number = compute(a, b);
+const picked = (a > b) ? a : b;
+const cb: Callback = makeCallback((x) => x);
+'''
+
+
+def test_typed_consts_and_multiline_arrows_are_definitions():
+    defs = explain.find_definitions(TSX_TYPED, "js")
+    for name, line in (("Plane", 1), ("Caret", 7), ("projectPose", 9), ("emphBoxes", 14),
+                       ("handler", 16), ("Wrapped", 17)):
+        assert defs.get(name) == [line], (name, defs.get(name))
+    for name in ("LIMITS", "total", "picked", "cb"):
+        assert name not in defs, (name, defs.get(name))

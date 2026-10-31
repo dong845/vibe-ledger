@@ -107,6 +107,10 @@ def validate(led: dict) -> None:
             p.append(f"{where}: still_present must be true or false")
 
     m = led.get("map", {})
+    labels = m.get("lane_labels", {})  # optional: a project that is not a web app names its own lanes
+    if not isinstance(labels, dict) or any(k not in LANES or not isinstance(v, str) or not v.strip()
+                                           for k, v in labels.items()):
+        p.append(f"map lane_labels: keys must be among {', '.join(LANES)} and values non-empty text")
     nids: set = set()
     for n in m.get("nodes", []):
         where = f"map node {n.get('id')}"

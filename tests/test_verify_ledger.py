@@ -177,3 +177,10 @@ def test_stale_probe_findings_do_not_fill_cells(root):
              "implies": [{"resource": "ghost", "subject": "anonymous", "perm": "read", "value": "allow"}]}
     out = verify.verify_ledger(base(), INDEX, root, {"findings": [FINDING, stale]})
     assert "ghost" not in {r["name"] for r in out["access"]["resources"]}
+
+
+def test_map_keeps_its_lane_labels(root):
+    led = base()
+    led["map"]["lane_labels"] = {"server": "本机处理"}
+    assert run(root, led)["map"]["lane_labels"] == {"server": "本机处理"}
+    assert run(root)["map"]["lane_labels"] == {}

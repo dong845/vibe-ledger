@@ -540,10 +540,19 @@
       minX = Math.min(minX, b.x); minY = Math.min(minY, b.y); maxX = Math.max(maxX, b.x + W); maxY = Math.max(maxY, b.y + H);
     });
     var w = maxX - minX + 80, h = maxY - minY + 80;
-    var s = Math.max(Math.min((r.width - 40) / w, (r.height - 40) / h, 1.1), r.width < 560 ? 0.45 : 0.55);
+    var fit = Math.min((r.width - 40) / w, (r.height - 40) / h, 1.1), floor = r.width < 560 ? 0.45 : 0.55;
+    var s = Math.max(fit, floor);
     view.s = s;
-    view.x = r.width / 2 - (minX + maxX) / 2 * s;
-    view.y = r.height / 2 - (minY + maxY) / 2 * s;
+    if (fit >= floor) {
+      view.x = r.width / 2 - (minX + maxX) / 2 * s;
+      view.y = r.height / 2 - (minY + maxY) / 2 * s;
+    } else {
+      // the route is wider or taller than the screen at a readable size: centring the whole route
+      // would show the empty middle of a big folder, so start where the route starts
+      var first = list[0];
+      view.x = 40 - first.x * s;
+      view.y = r.height / 2 - (first.y + H / 2) * s;
+    }
     apply();
   }
   function chip(id) {
