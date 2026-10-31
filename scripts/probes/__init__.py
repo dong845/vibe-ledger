@@ -37,6 +37,24 @@ class Finding:
         return asdict(self)
 
 
+# Keys only a browser extension declares. A manifest with manifest_version but none of
+# these (e.g. a component inside a headless Chrome that Remotion/Puppeteer download into
+# the project) is not an extension of the project.
+_EXTENSION_KEYS = {"background", "content_scripts", "action", "browser_action", "page_action",
+                   "side_panel", "sidebar_action", "permissions", "host_permissions",
+                   "optional_permissions", "optional_host_permissions", "options_page",
+                   "options_ui", "devtools_page", "chrome_url_overrides",
+                   "web_accessible_resources", "commands", "omnibox", "theme"}
+
+
+def _is_extension(path) -> bool:
+    try:
+        data = json.loads(read_text(path))
+    except json.JSONDecodeError:
+        return False
+    return isinstance(data, dict) and bool(_EXTENSION_KEYS & data.keys())
+
+
 def detect_stack(root) -> dict:
     root = Path(root)
     found: set[str] = set()
@@ -55,7 +73,7 @@ def detect_stack(root) -> dict:
             found.add(_MARKER_FILES[p.name])
         elif p.name in ("firebase.json", "firestore.rules", "storage.rules", "database.rules.json"):
             found.add("firebase")
-        elif p.name == "manifest.json" and '"manifest_version"' in read_text(p):
+        elif p.name == "manifest.json" and '"manifest_version"' in read_text(p) and _is_extension(p):
             found.add("chrome-extension")
     if (root / "supabase").is_dir():
         found.add("supabase")

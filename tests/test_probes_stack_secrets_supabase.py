@@ -173,3 +173,14 @@ def test_chrome_extension_is_named_as_not_covered(tmp_path):
     write(tmp_path, "manifest.json", json.dumps({"manifest_version": 3, "name": "x", "permissions": ["storage"]}))
     st = probes.detect_stack(tmp_path)
     assert st["stacks"] == ["chrome-extension"] and st["unsupported"] == ["chrome-extension"]
+
+
+def test_a_bundled_browser_component_manifest_is_not_an_extension(tmp_path):
+    # Remotion/Puppeteer download headless Chrome into the project; its component
+    # manifests carry manifest_version but declare nothing an extension does
+    write(tmp_path, ".remotion/chrome/PrivacySandbox/manifest.json", json.dumps(
+        {"manifest_version": 2, "name": "Privacy Sandbox Attestations", "version": "1", "pre_installed": True}))
+    write(tmp_path, "broken/manifest.json", '{"manifest_version": 3, ')
+    assert probes.detect_stack(tmp_path)["stacks"] == []
+    write(tmp_path, "ext/manifest.json", json.dumps({"manifest_version": 3, "action": {"default_popup": "p.html"}}))
+    assert probes.detect_stack(tmp_path)["stacks"] == ["chrome-extension"]

@@ -65,6 +65,24 @@ def test_iter_files_skips_dependency_dirs_and_big_files(tmp_path):
     assert [p.name for p in common.iter_files(tmp_path, {".js", ".ts"})] == ["b.ts"]
 
 
+def test_iter_files_skips_nested_checkouts_but_not_the_root(tmp_path):
+    # the project root is itself a git repo; a worktree inside it has a `.git` FILE,
+    # a nested clone a `.git` FOLDER — both are copies of other code, not this project
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.py").write_text("x")
+    wt = tmp_path / ".worktrees" / "feature"
+    wt.mkdir(parents=True)
+    (wt / ".git").write_text("gitdir: /elsewhere/.git/worktrees/feature\n")
+    (wt / "a.py").write_text("x")
+    clone = tmp_path / "third_party" / "lib"
+    clone.mkdir(parents=True)
+    (clone / ".git").mkdir()
+    (clone / "b.py").write_text("x")
+    got = [p.relative_to(tmp_path).as_posix() for p in common.iter_files(tmp_path, {".py"})]
+    assert got == ["src/a.py"]
+
+
 def test_detect_lang_votes_per_message():
     zh = ["帮我做一个记账应用", "只有我自己能看到",
           "Error: permission denied for table notes at line 3 of the migration"]

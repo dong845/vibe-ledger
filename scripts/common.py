@@ -107,11 +107,16 @@ MAX_FILE_BYTES = 1_000_000
 
 def iter_files(root, exts: set[str] | None = None) -> list[Path]:
     """Project files worth reading, sorted: skips dependency/build folders,
-    symlinks and files larger than MAX_FILE_BYTES."""
+    symlinks, nested git checkouts (worktrees and clones inside the project — a
+    subfolder with its own `.git` — are copies of other code, not this project)
+    and files larger than MAX_FILE_BYTES."""
     out = []
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(d for d in dirnames
-                             if d not in SKIP_DIRS and not os.path.islink(os.path.join(dirpath, d)))
+        dirnames[:] = sorted(
+            d for d in dirnames
+            if d not in SKIP_DIRS
+            and not os.path.islink(os.path.join(dirpath, d))
+            and not os.path.lexists(os.path.join(dirpath, d, ".git")))
         for name in sorted(filenames):
             p = Path(dirpath) / name
             if exts is not None and p.suffix.lower() not in exts:
