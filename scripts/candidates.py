@@ -9,7 +9,7 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
-from common import USER_ERROR, iter_files, read_text, rel
+from common import USER_ERROR, git_ignored, iter_files, read_text, rel
 from redact import redact
 
 WINDOW_MAX = 20
@@ -153,7 +153,11 @@ def find_claims(recs: list[dict]) -> list[dict]:
 
 def scan_code_todos(root) -> list[dict]:
     out = []
-    for p in iter_files(root, TODO_EXTS):
+    paths = iter_files(root, TODO_EXTS)
+    ignored = git_ignored(root, (rel(p, root) for p in paths))  # generated output is not the project's
+    for p in paths:
+        if rel(p, root) in ignored:
+            continue
         for i, line in enumerate(read_text(p).splitlines(), 1):
             if len(line) <= 500 and TODO.search(line):
                 out.append({"path": rel(p, root), "line": i, "text": redact(line.strip())[:200]})

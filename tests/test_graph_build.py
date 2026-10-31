@@ -177,3 +177,55 @@ def test_an_oversized_folder_group_is_split_further(tmp_path):
     assert [f["id"] for f in g["folders"]] == ["src/a", "src/b", "src/c", "src/d"]  # not one 140-file "src"
     flat = ["solo/f%d.ts" % i for i in range(60)] + ["one/x.ts", "two/y.ts"]
     assert [f["id"] for f in graph.folder_groups(flat)] == ["solo"]  # nothing below it to split into: kept whole
+
+
+def _git_init(root):
+    import subprocess
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+
+
+def test_git_ignored_files_are_left_out_and_counted(tmp_path):
+    # generated output a tool writes into the project (here excluded through .git/info/exclude,
+    # which a .gitignore-only check would miss) is not the project's code
+    _git_init(tmp_path)
+    (tmp_path / ".git" / "info").mkdir(exist_ok=True)
+    (tmp_path / ".git" / "info" / "exclude").write_text(".superpowers/\n")
+    write(tmp_path, ".gitignore", "gen/\n")
+    write(tmp_path, "src/a.ts", 'import "./b";\n')
+    write(tmp_path, "src/b.ts")
+    write(tmp_path, "src/new.ts")  # untracked but not ignored: still the project's code
+    write(tmp_path, ".superpowers/films/x/kit.ts", "// TODO: generated\n")
+    write(tmp_path, "gen/out.py", "# TODO: generated\n")
+    files, excluded = graph.collect_files(tmp_path)
+    assert sorted(files) == ["src/a.ts", "src/b.ts", "src/new.ts"]
+    assert excluded["ignored by git"] == 2
+    import candidates
+    assert candidates.scan_code_todos(tmp_path) == []
+
+
+def test_collect_files_without_git_keeps_everything(tmp_path):
+    write(tmp_path, ".gitignore", "gen/\n")
+    write(tmp_path, "gen/out.py")
+    files, excluded = graph.collect_files(tmp_path)
+    assert sorted(files) == ["gen/out.py"] and not excluded["ignored by git"]
+
+
+def test_explain_selection_breaks_score_ties_by_real_fan_in(tmp_path):
+    # both hubs hit the capped score; the one more files depend on must win, not the one
+    # earlier in the alphabet
+    write(tmp_path, "src/a_minor.ts")
+    write(tmp_path, "src/z_core.ts")
+    for i in range(6):
+        write(tmp_path, f"src/m{i}.ts", 'import "./a_minor";\nimport "./z_core";\n')
+    for i in range(6, 12):
+        write(tmp_path, f"src/m{i}.ts", 'import "./z_core";\n')
+    import graph as gmod
+    old = gmod.EXPLAIN_MAX
+    gmod.EXPLAIN_MAX = 1
+    try:
+        g = graph.build(tmp_path, [], NO_PROBES)
+    finally:
+        gmod.EXPLAIN_MAX = old
+    nodes = {n["id"]: n for n in g["nodes"]}
+    assert nodes["src/a_minor.ts"]["score"] == nodes["src/z_core.ts"]["score"]
+    assert [k for k, v in nodes.items() if v["explain"]] == ["src/z_core.ts"]

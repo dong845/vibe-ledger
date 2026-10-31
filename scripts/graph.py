@@ -11,7 +11,7 @@ import re
 from collections import Counter, defaultdict
 from pathlib import Path, PurePosixPath
 
-from common import is_within, iter_files, read_text, rel
+from common import git_ignored, is_within, iter_files, read_text, rel
 
 JS_EXTS = (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue", ".svelte")
 PY_EXT = ".py"
@@ -108,9 +108,12 @@ def collect_files(root) -> tuple[dict[str, Path], Counter]:
     root = Path(root).resolve()
     files: dict[str, Path] = {}
     excluded: Counter = Counter()
-    for p in iter_files(root, set(JS_EXTS) | {PY_EXT}):
-        r = rel(p, root)
-        if TEST_FILE.search(r):
+    found = {rel(p, root): p for p in iter_files(root, set(JS_EXTS) | {PY_EXT})}
+    ignored = git_ignored(root, found)  # generated output, caches, local scratch
+    for r, p in found.items():
+        if r in ignored:
+            excluded["ignored by git"] += 1
+        elif TEST_FILE.search(r):
             excluded["tests"] += 1
         elif CONFIG_FILE.search(r):
             excluded["config"] += 1
@@ -285,7 +288,14 @@ def resolve_py(dots: str, module: str, src: str, root) -> tuple[str, str | None]
             if cand.is_file() and is_within(cand, root):
                 return "file", rel(cand, root)
         return "missing", None
-    for top in (root, root / "src"):
+    # A script run directly has its own folder first on sys.path, so in a folder that is
+    # not a package `import workshop` means the sibling workshop.py. Inside a package an
+    # absolute import stays absolute.
+    here = root / PurePosixPath(src).parent
+    tops = [root, root / "src"]
+    if here != root and not (here / "__init__.py").is_file():
+        tops.insert(0, here)
+    for top in tops:
         target = top.joinpath(*parts)
         for cand in (target.with_suffix(".py"), target / "__init__.py"):
             if cand.is_file():
@@ -614,7 +624,11 @@ def build(root, recs, probes) -> dict:
                       "exports": exports(texts[f], "py" if f.endswith(PY_EXT) else "js"),
                       "score": score, "explain": False, "edits": edits.get(f),
                       "sha": hashlib.sha1(texts[f].encode("utf-8", "replace")).hexdigest()[:12]})  # for comparing runs
-    for n in sorted((n for n in nodes if n["score"] > 0), key=lambda n: (-n["score"], n["id"]))[:EXPLAIN_MAX]:
+    # the score caps fan-in at 5, so a big project has many ties; break them by how many
+    # files really depend on the file, then by how often it was edited — not by name
+    def rank(n):
+        return (-n["score"], -indeg[n["id"]], -((n["edits"] or {}).get("count", 0)), n["id"])
+    for n in sorted((n for n in nodes if n["score"] > 0), key=rank)[:EXPLAIN_MAX]:
         n["explain"] = True
     collapsed = len(nodes) > FOLDER_THRESHOLD
     return {"nodes": nodes,

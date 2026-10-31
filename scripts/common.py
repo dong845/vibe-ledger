@@ -146,6 +146,25 @@ def git_ls_files(root) -> list[str] | None:
     return [p for p in res.stdout.decode("utf-8", "replace").split("\0") if p]
 
 
+def git_ignored(root, rel_paths: Iterable[str]) -> set[str]:
+    """The paths (relative to `root`) git ignores — .gitignore, .git/info/exclude and the
+    global excludes; tracked files never count. Empty when `root` is not in a git repo:
+    the caller then keeps everything, which is the pre-git behaviour."""
+    rel_paths = list(rel_paths)
+    if not rel_paths:
+        return set()
+    try:
+        res = subprocess.run(["git", "-C", str(root), "check-ignore", "-z", "--stdin"],
+                             input="\0".join(rel_paths).encode("utf-8") + b"\0",
+                             capture_output=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return set()
+    # 0 = some ignored, 1 = none ignored, 128 = not a repo / fatal
+    if res.returncode not in (0, 1):
+        return set()
+    return {p for p in res.stdout.decode("utf-8", "replace").split("\0") if p}
+
+
 # A tool output that is an error even though the tool did not flag it.
 ERROR_LINE = re.compile(
     r"(?im)^\s*(?:error|fatal|uncaught|unhandled)\b"

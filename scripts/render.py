@@ -145,6 +145,8 @@ def _coverage(ledger: dict, run: dict, probes: dict, lang: str, graph_cov: dict 
         ex = graph_cov.get("excluded", {})
         if ex.get("tests") or ex.get("config"):
             items.append(f'<li>{h(t(lang, "cov_graph_excluded", tests=ex.get("tests", 0), config=ex.get("config", 0)))}</li>')
+        if ex.get("ignored by git"):
+            items.append(f'<li>{h(t(lang, "cov_graph_ignored", n=ex["ignored by git"]))}</li>')
         unres = graph_cov.get("unresolved", [])
         if unres:
             sub = "".join(f'<li><code>{ht(u["from"], 80)}:{u["line"]}</code> → <code>{ht(u["spec"], 80)}</code></li>'

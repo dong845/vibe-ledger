@@ -109,6 +109,38 @@ def test_resolve_py_relative_and_absolute(tmp_path):
     assert graph.resolve_py("", "flask", "main.py", tmp_path) == ("package", "flask")
 
 
+def test_resolve_py_finds_sibling_modules_of_a_script_folder(tmp_path):
+    # a script run directly has its own folder first on sys.path: `import workshop` in
+    # scripts/render.py loads scripts/workshop.py, even if the root has one too
+    write(tmp_path, "scripts/render.py")
+    write(tmp_path, "scripts/workshop.py")
+    write(tmp_path, "scripts/pkg/__init__.py")
+    write(tmp_path, "workshop.py")
+    write(tmp_path, "tools/run.py")
+    assert graph.resolve_py("", "workshop", "scripts/render.py", tmp_path) == ("file", "scripts/workshop.py")
+    assert graph.resolve_py("", "pkg", "scripts/render.py", tmp_path) == ("file", "scripts/pkg/__init__.py")
+    assert graph.resolve_py("", "workshop", "tools/run.py", tmp_path) == ("file", "workshop.py")
+    assert graph.resolve_py("", "numpy", "scripts/render.py", tmp_path) == ("package", "numpy")
+
+
+def test_resolve_py_inside_a_package_does_not_take_siblings(tmp_path):
+    # inside a package an absolute import is absolute: app/views.py's `import auth`
+    # does not mean app/auth.py
+    write(tmp_path, "app/__init__.py")
+    write(tmp_path, "app/views.py")
+    write(tmp_path, "app/auth.py")
+    assert graph.resolve_py("", "auth", "app/views.py", tmp_path) == ("package", "auth")
+
+
+def test_indented_sibling_imports_become_links(tmp_path):
+    write(tmp_path, "scripts/render.py", "import os\n\ndef go():\n    import workshop as _ws\n    from stage import run\n")
+    write(tmp_path, "scripts/workshop.py")
+    write(tmp_path, "scripts/stage.py")
+    g = graph.build(tmp_path, [], {"findings": []})
+    assert {(e["from"], e["to"]) for e in g["edges"]} == {
+        ("scripts/render.py", "scripts/workshop.py"), ("scripts/render.py", "scripts/stage.py")}
+
+
 def test_collect_files_excludes_tests_and_config(tmp_path):
     for rel in ("src/a.ts", "src/b.test.ts", "tests/c.py", "vite.config.ts", "src/__tests__/d.js",
                 "src/styles.css", "node_modules/x/index.js", "app/main.py"):
