@@ -183,7 +183,7 @@ def test_shot_without_chrome_says_so(env, capsys, monkeypatch):
 def test_version(capsys):
     with pytest.raises(SystemExit):
         vl.main(["--version"])
-    assert "0.2.0" in capsys.readouterr().out
+    assert vl.__version__ in capsys.readouterr().out
 
 
 def test_a_failed_start_does_not_leave_a_half_built_latest_run(env, monkeypatch):

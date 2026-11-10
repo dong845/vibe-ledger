@@ -7,8 +7,8 @@
     "no_certain_findings": false, "compromise_hints": ["cors_wildcard"], "min_deferrals": 1, "min_claims": 0,
     "unsupported": [], "lang": "en"
   },
-  "graph": {"nodes": ["server.js"], "entries": ["server.js"], "externals": ["ext:openai"],
-            "edges": [["server.js", "ext:openai"]]},
+  "graph": {"nodes": ["public/index.html", "server.js"], "entries": ["public/index.html", "server.js"], "externals": ["ext:openai"],
+            "edges": [["public/index.html", "server.js"], ["server.js", "ext:openai"]]},
   "explain": [{"path": "server.js", "label": "relays chat messages to OpenAI", "text_any": ["openai", "chat", "聊天"]}],
   "must_find": [
     {"label": "strangers can run up the OpenAI bill", "status": ["broken", "partial"],

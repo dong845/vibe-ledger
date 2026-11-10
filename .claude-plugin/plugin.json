@@ -2,9 +2,19 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "vibe-ledger",
   "displayName": "Vibe Ledger",
-  "description": "Explain an AI-built app to the person who made it and check it at the same time: an interactive flowchart of the project's files (click one to read what it does, who calls it, its risks and history), plus a ledger of what was asked, claimed and put off in the Claude Code / Codex conversations, each verified against the code. One offline HTML page. Local only.",
-  "version": "0.2.0",
-  "author": {"name": "dong845"},
+  "description": "Explain an AI-built app to the person who made it and check it: a map of the project's parts and the data between them (open a part into its files), every request from the Claude Code / Codex conversations checked against the code (done, partly, not done, done differently, superseded), and a safety ledger of what was promised and put off — each verdict backed by evidence a script verifies. One offline HTML page. Local only.",
+  "version": "0.3.0",
+  "author": {
+    "name": "dong845"
+  },
   "license": "MIT",
-  "keywords": ["agent-skill", "vibe-coding", "code-explanation", "security-review", "claude-code", "codex", "local-first"]
+  "keywords": [
+    "agent-skill",
+    "vibe-coding",
+    "code-explanation",
+    "security-review",
+    "claude-code",
+    "codex",
+    "local-first"
+  ]
 }

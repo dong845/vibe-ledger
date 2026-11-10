@@ -12,7 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, Iterator
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 _WS = re.compile(r"\s+")
 
@@ -97,7 +97,8 @@ def write_jsonl(path, rows: Iterable[dict]) -> None:
 
 SKIP_DIRS = {".git", "node_modules", ".next", "dist", "build", "out", ".venv", "venv",
              "__pycache__", ".turbo", ".vercel", ".cache", "coverage", ".svelte-kit",
-             ".nuxt", "vendor", ".expo", ".idea", ".vscode"}
+             ".nuxt", "vendor", ".expo", ".idea", ".vscode",
+             ".remotion"}  # Remotion's download cache (a whole headless Chrome), not the project's code
 CODE_EXTS = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue", ".svelte", ".py", ".rb",
              ".go", ".php", ".sql", ".rules", ".json", ".html", ".toml", ".yaml", ".yml"}
 SOURCE_EXTS = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue", ".svelte", ".py", ".rb",
@@ -187,10 +188,14 @@ _LATIN = re.compile(r"[A-Za-z]")
 
 def detect_lang(texts: Iterable[str]) -> str:
     """'zh' when at least as many user messages are mainly Chinese as English.
-    A message counts as Chinese when 3 × its CJK characters ≥ its Latin letters."""
+    A message counts as Chinese when 3 × its CJK characters ≥ its Latin letters. A message too short to tell
+    ("push", "ok", "继续" — under 3 CJK characters and under 12 letters) does not vote: a Chinese-speaking user
+    types "push" a lot, and those votes once turned a mostly Chinese project's report English."""
     zh = en = 0
     for text in texts:
         cjk, latin = len(_CJK.findall(text)), len(_LATIN.findall(text))
+        if cjk < 3 and latin < 12:
+            continue
         if cjk and cjk * 3 >= latin:
             zh += 1
         elif latin:

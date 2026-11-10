@@ -89,6 +89,9 @@ def test_detect_lang_votes_per_message():
     assert common.detect_lang(zh) == "zh"
     assert common.detect_lang(["make me a habit tracker", "only I should see my data"]) == "en"
     assert common.detect_lang([]) == "en"
+    # short commands do not vote: a Chinese conversation full of "push" stays Chinese
+    assert common.detect_lang(["帮我加一个导出按钮", "push", "push", "ok", "push", "再改一下颜色吧"]) == "zh"
+    assert common.detect_lang(["push", "ok"]) == "en"
 
 
 def test_git_ls_files_returns_none_outside_git(tmp_path):
@@ -102,3 +105,11 @@ def test_error_patterns():
     assert common.USER_ERROR.search("保存的时候报错了")
     assert common.USER_ERROR.search("Access to fetch has been blocked by CORS policy")
     assert not common.USER_ERROR.search("make the button blue")
+
+
+def test_tool_caches_are_not_project_files(tmp_path):
+    (tmp_path / ".remotion" / "chrome" / "res").mkdir(parents=True)
+    (tmp_path / ".remotion" / "chrome" / "res" / "content.js").write_text("x", encoding="utf-8")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.ts").write_text("x", encoding="utf-8")
+    assert [p.relative_to(tmp_path).as_posix() for p in common.iter_files(tmp_path)] == ["src/a.ts"]

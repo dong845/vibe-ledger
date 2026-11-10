@@ -268,3 +268,22 @@ def test_paid_ai_hosts_beyond_the_us_majors(tmp_path):
                    "ext:groq": "paid", "ext:mistral": "paid"}
     tts = next(e for e in g["externals"] if e["id"] == "ext:minimax")
     assert [(ev["path"], ev["line"]) for ev in tts["evidence"]] == [("tts.py", 1)]  # first hit per file
+
+
+def test_a_page_with_its_own_script_is_code_and_links_to_the_server_it_calls(tmp_path):
+    code = "  const rows = [];\n" * 20  # real page logic, well over a one-liner
+    write(tmp_path, "public/index.html",
+          f'<link rel="stylesheet" href="/style.css"><script>\n{code}'
+          "async function load(month) {\n  const url = '/api/expenses?month=' + month;\n"
+          "  return (await fetch(url)).json();\n}\nfetch('/logo.png');\n</script>\n<p>'/api/not-in-a-script'</p>\n")
+    write(tmp_path, "public/about.html", "<h1>About</h1><script>var x = 1;</script>")  # markup and a one-liner
+    write(tmp_path, "server.js", "const http = require('http');\n"
+          "http.createServer((q, s) => { if (q.url.startsWith('/api/expenses')) s.end('[]'); "
+          "if (q.url === '/logo.png') s.end(); if (q.url === '/api/not-in-a-script') s.end(); }).listen(3000);\n")
+    g = graph.build(tmp_path, [], NO_PROBES)
+    ids = {n["id"] for n in g["nodes"]}
+    assert "public/index.html" in ids and "public/about.html" not in ids
+    entries = {e["path"]: e["reason"] for e in g["entries"]}
+    assert entries["public/index.html"] == "page with its own script"
+    links = [(e["from"], e["to"], e["names"]) for e in g["edges"]]
+    assert links == [("public/index.html", "server.js", ["/api/expenses"])]  # not the image, not text outside the script

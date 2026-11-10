@@ -256,6 +256,12 @@ def _function_map(fmap: dict | None, g: dict, risks: dict, lang: str) -> dict:
                     link["carries"].append(items[iid]["name"])
     externals = {x["id"]: x for x in g["externals"]}
     owner = area_of_path(fmap)
+    # a page calls its server by API path: on the map that link says which paths, like a data link says which data
+    for e in g["edges"]:
+        a, b = owner.get(e["from"]), owner.get(e["to"])
+        if e["from"].endswith(".html") and e.get("names") and a and b and a != b:
+            link = links.setdefault((a, b), {"from": e["from"], "to": e["to"], "carries": []})
+            link["carries"] += [n for n in e["names"] if n not in link["carries"]]
     io = defaultdict(lambda: {"reads": [], "writes": [], "calls": []})
     for f in fmap["flows"]:
         side = io[f["area"]]["writes" if f["op"] == "write" else "reads"]
@@ -405,7 +411,8 @@ def render_graph_tab(lang: str, function_map: bool = False) -> str:
     # with a function map: one layered map (areas that open into their files) and the data view; else the folder views
     choices = ((("map", "g_mode_map"), ("data", "g_mode_flow")) if function_map else
                (("files", "g_mode_files"), ("modules", "g_mode_modules"), ("data", "g_mode_data")))
-    modes = "".join(f'<button type="button" data-mode="{m}"{" class=\"on\"" if i == 0 else ""}>{h(t(lang, key))}</button>'
+    on = ' class="on"'  # no backslash inside an f-string expression: Python before 3.12 rejects it
+    modes = "".join(f'<button type="button" data-mode="{m}"{on if i == 0 else ""}>{h(t(lang, key))}</button>'
                     for i, (m, key) in enumerate(choices))
     export = (f'<button type="button" data-act="export">{h(t(lang, "g_export"))}</button>'
               '<div class="vlg-export-menu" hidden>'

@@ -1,7 +1,7 @@
 """What changed between two runs of the same project: files, links, outside services, risks and promises.
 
 Everything is compared in a language-independent way: a check finding by (probe, file, original message), a
-compromise by what it bypassed, a promise by its own words. Only the texts shown to the reader are translated."""
+compromise by what it bypassed, a promise by the messages it was said in. Only the texts shown to the reader are translated."""
 from __future__ import annotations
 
 import json
@@ -58,14 +58,32 @@ def _risks(ledger: dict, probes: dict, lang: str) -> dict:
     return out
 
 
-def _promises(ledger: dict) -> dict:
-    """{(words, n): status} — a promise is known by its words; two with the same words are told apart by order."""
-    seen: dict[str, int] = {}
-    out = {}
-    for p in ledger.get("promises", []):
-        n = seen[p["plain"]] = seen.get(p["plain"], -1) + 1
-        out[(p["plain"], n)] = p["status"]
-    return out
+def _promises(ledger: dict) -> list[dict]:
+    """Each promise with the messages it was said in (verified sources only)."""
+    ev = ledger.get("evidence", {})
+    return [{"plain": p["plain"], "status": p["status"], "type": p.get("type"),
+             "msgs": {ev[i]["msg_id"] for i in p.get("source", []) if ev.get(i, {}).get("ok") and ev[i].get("msg_id")}}
+            for p in ledger.get("promises", [])]
+
+
+def _pair_promises(old: list[dict], new: list[dict]) -> tuple[list, list, list]:
+    """(pairs, new only, gone). Each run's agent words a promise its own way, cites a different mix of messages and
+    may file it under another question; the messages it came from stay. Two promises are the same when they have
+    the same type and share a source message (the most shared first); one with no verified source pairs only by
+    identical words."""
+    cands = sorted(((len(o["msgs"] & n["msgs"]), i, j) for i, o in enumerate(old) for j, n in enumerate(new)
+                    if o["type"] == n["type"] and o["msgs"] & n["msgs"]), key=lambda c: (-c[0], c[1], c[2]))
+    used_o, used_n, pairs = set(), set(), []
+    for _, i, j in cands:
+        if i not in used_o and j not in used_n:
+            used_o.add(i); used_n.add(j); pairs.append((old[i], new[j]))
+    for i, o in enumerate(old):
+        if i in used_o:
+            continue
+        j = next((j for j, n in enumerate(new) if j not in used_n and n["plain"] == o["plain"] and n["type"] == o["type"]), None)
+        if j is not None:
+            used_o.add(i); used_n.add(j); pairs.append((o, new[j]))
+    return (pairs, [n for j, n in enumerate(new) if j not in used_n], [o for i, o in enumerate(old) if i not in used_o])
 
 
 def compare(prev: Path, cur: Path, lang: str) -> dict:
@@ -81,8 +99,8 @@ def compare(prev: Path, cur: Path, lang: str) -> dict:
     x1 = {x["id"] for x in g1.get("externals", [])}
     r0 = _risks(_load(prev / "ledger.verified.json", {}), _load(prev / "probes.json", {}), lang)
     r1 = _risks(_load(cur / "ledger.verified.json", {}), _load(cur / "probes.json", {}), lang)
-    p0 = _promises(_load(prev / "ledger.verified.json", {}))
-    p1 = _promises(_load(cur / "ledger.verified.json", {}))
+    pairs, fresh, gone = _pair_promises(_promises(_load(prev / "ledger.verified.json", {})),
+                                        _promises(_load(cur / "ledger.verified.json", {})))
     order = lambda items: sorted(items, key=lambda r: (r["path"], r["text"]))  # noqa: E731
     return {
         "prev_run": prev.name,
@@ -93,10 +111,10 @@ def compare(prev: Path, cur: Path, lang: str) -> dict:
         "services": {"added": sorted(x1 - x0), "removed": sorted(x0 - x1)},
         "risks": {"new": order(r1[k] for k in r1.keys() - r0.keys()),
                   "resolved": order(r0[k] for k in r0.keys() - r1.keys())},
-        "promises": {"changed": [{"plain": k[0], "before": p0[k], "after": p1[k]} for k in sorted(p0.keys() & p1.keys())
-                                 if p0[k] != p1[k]],
-                     "new": [{"plain": k[0], "status": p1[k]} for k in sorted(p1.keys() - p0.keys())],
-                     "gone": [{"plain": k[0], "status": p0[k]} for k in sorted(p0.keys() - p1.keys())]},
+        "promises": {"changed": [{"plain": b["plain"], "before": a["status"], "after": b["status"]}
+                                 for a, b in pairs if a["status"] != b["status"]],
+                     "new": [{"plain": b["plain"], "status": b["status"]} for b in fresh],
+                     "gone": [{"plain": a["plain"], "status": a["status"]} for a in gone]},
     }
 
 

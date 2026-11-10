@@ -151,3 +151,14 @@ def test_guide_names_the_function_map_vocabulary():
     assert json.loads(block)["areas"] and not areas.problems(json.loads(block))
     missing = [w for w in areas.OPS + areas.ITEM_KINDS if f"`{w}`" not in guide]
     assert not missing, missing
+
+
+def test_a_page_calling_its_server_is_a_labelled_link_on_the_map(project):
+    write(project, "web/index.html", "x")
+    g = graph(["scripts/tts.py", "scripts/render.py", "scripts/a_qa.py", "web/index.html"])
+    g["edges"] = [{"from": "web/index.html", "to": "scripts/render.py", "names": ["/api/film"]}]
+    d = doc()
+    d["areas"].insert(0, {"id": "page", "name": "页面", "plain": "你看到的页面", "match": ["web/"]})
+    m = areas.verify(d, g, project)
+    links = graph_page._function_map(m, g, {}, "zh")["area_links"]
+    assert {"from": "web/index.html", "to": "scripts/render.py", "carries": ["/api/film"]} in links

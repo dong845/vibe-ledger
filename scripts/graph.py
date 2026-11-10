@@ -15,6 +15,15 @@ from common import git_ignored, is_within, iter_files, read_text, rel
 
 JS_EXTS = (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue", ".svelte")
 PY_EXT = ".py"
+HTML_EXT = ".html"
+# an inline <script> (no src) with real code in it: the page's own logic, which a vibe-coded app often keeps there
+INLINE_SCRIPT = re.compile(r"<script\b(?![^>]*\bsrc\s*=)(?![^>]*\btype\s*=\s*[\"']?(?:application/(?:ld\+)?json|text/template)\b)[^>]*>([\s\S]*?)</script>", re.I)
+INLINE_MIN = 200  # characters: below this an inline script is a one-liner, not the page's logic
+# a path the page's script names — fetch("/api/entries"), const url = '/api/export?month=', the same on
+# http://localhost:3001 — that a server file
+# also names as a string is how the page talks to it; asset paths (a stylesheet, an image) are not
+PAGE_PATH = re.compile(r"""[`'"](?:https?://(?:localhost|127\.0\.0\.1)(?::\d+)?)?(/[A-Za-z][A-Za-z0-9_\-/.]*)(?=[`'"?#$])""")
+ASSET_EXT = re.compile(r"\.(?:css|js|mjs|png|jpe?g|gif|svg|ico|webp|woff2?|ttf|html?|map)$", re.I)
 RESOLVE_EXTS = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte")
 TEST_FILE = re.compile(r"(?:^|/)(?:tests?|__tests__|spec|fixtures?)/|\.(?:test|spec)\.[a-z]+$")
 CONFIG_FILE = re.compile(r"(?:^|/)(?:[^/]+\.config\.[a-z]+|\.eslintrc[^/]*|\.prettierrc[^/]*|jest\.setup\.[a-z]+"
@@ -104,11 +113,39 @@ def py_imports(text: str) -> list[tuple[str, str, int, list[str]]]:
     return [item for _, item in sorted(found, key=lambda f: f[0])]
 
 
+def has_inline_code(html: str) -> bool:
+    return sum(len(m.group(1).strip()) for m in INLINE_SCRIPT.finditer(html)) >= INLINE_MIN
+
+
+def _in_inline_script(html: str, pos: int) -> bool:
+    return any(m.start(1) <= pos < m.end(1) for m in INLINE_SCRIPT.finditer(html))
+
+
+def page_fetch_edges(files: dict, texts: dict) -> list[tuple[str, str, int, list]]:
+    """(page, server file, line, [path]) for each path a page's script fetches that a server file names as a string."""
+    out = []
+    servers = [f for f in sorted(files) if not f.endswith(HTML_EXT)]
+    for page in sorted(f for f in files if f.endswith(HTML_EXT)):
+        seen = set()
+        for m in PAGE_PATH.finditer(texts[page]):
+            path = m.group(1).rstrip("/")
+            if len(path) < 2 or path in seen or ASSET_EXT.search(path) or not _in_inline_script(texts[page], m.start()):
+                continue
+            seen.add(path)
+            lit = re.compile(r"""[`'"]""" + re.escape(path) + r"""(?:[`'"/?]|$)""")
+            for srv in servers:
+                if lit.search(texts[srv]):
+                    out.append((page, srv, _line(texts[page], m.start()), [path]))
+    return out
+
+
 def collect_files(root) -> tuple[dict[str, Path], Counter]:
     root = Path(root).resolve()
     files: dict[str, Path] = {}
     excluded: Counter = Counter()
-    found = {rel(p, root): p for p in iter_files(root, set(JS_EXTS) | {PY_EXT})}
+    found = {rel(p, root): p for p in iter_files(root, set(JS_EXTS) | {PY_EXT, HTML_EXT})}
+    # a page counts as code only when it carries its own script; plain markup and templates stay out
+    found = {r: p for r, p in found.items() if not r.endswith(HTML_EXT) or has_inline_code(read_text(p))}
     ignored = git_ignored(root, found)  # generated output, caches, local scratch
     for r, p in found.items():
         if r in ignored:
@@ -483,7 +520,9 @@ def find_entries(root, files: dict, texts: dict | None = None) -> dict[str, str]
             if isinstance(b, str):
                 add(_norm(b), "package.json bin")
     for f in sorted(files):
-        if f.endswith(JS_EXTS) and LISTEN.search(texts[f]):
+        if f.endswith(HTML_EXT):
+            add(f, "page with its own script")
+        elif f.endswith(JS_EXTS) and LISTEN.search(texts[f]):
             add(f, "starts a server (.listen)")
         elif f.endswith(PY_EXT) and (PY_MAIN.search(texts[f]) or PurePosixPath(f).name in ("app.py", "main.py", "manage.py")):
             add(f, "python entry point")
@@ -608,6 +647,8 @@ def build(root, recs, probes) -> dict:
             m = rx.search(clean)
             if m:
                 hit(f, info, _line(clean, m.start()))
+    for page, srv, line, names in page_fetch_edges(files, texts):
+        _add_edge(edges, page, srv, line, names)
     for (f, key), line in sorted(file_ext.items()):
         _add_edge(edges, f, "ext:" + key, line, [])
     edge_list = sorted(edges.values(), key=lambda e: (e["from"], e["to"]))

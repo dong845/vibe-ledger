@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 import common
@@ -14,7 +15,7 @@ def test_versions_agree():
     plugin = load(".claude-plugin/plugin.json")
     market = load(".claude-plugin/marketplace.json")
     versions = {common.__version__, plugin["version"], market["metadata"]["version"], market["plugins"][0]["version"]}
-    assert versions == {"0.2.0"}
+    assert len(versions) == 1 and re.fullmatch(r"\d+\.\d+\.\d+", common.__version__)
 
 
 def test_manifest_shape():

@@ -150,3 +150,31 @@ def test_a_quiet_comparison_is_marked_quiet(tmp_path):
     data = graph_page.page_data(g, {"files": {}, "evidence": {}}, {"evidence": {}, "promises": []}, {"findings": []},
                                 project, "zh", False, diff=d)
     assert data["diff"]["quiet"] is True
+
+
+def test_a_reworded_promise_from_the_same_message_is_the_same_promise(tmp_path):
+    """Each run's agent words a promise its own way; the message it came from does not change."""
+    project, runs = tmp_path / "app", tmp_path / "runs"
+    write(project, "a.ts")
+    ev = {"E1": {"kind": "transcript", "msg_id": "u-7", "quote": "只有我能看到", "ok": True}}
+
+    def said(plain, status):
+        return {**promise(plain, status), "source": ["E1"]}
+    prev, _ = make_run(runs, "20261010-090000", project, ledger={"evidence": ev, "compromises": [],
+                       "promises": [said("只有我自己能看到我的笔记", "broken")]})
+    cur, _ = make_run(runs, "20261012-090000", project, ledger={"evidence": ev, "compromises": [],
+                      "promises": [said("笔记只给我自己看", "kept")]})
+    assert diff.compare(prev, cur, "zh")["promises"] == {
+        "changed": [{"plain": "笔记只给我自己看", "before": "broken", "after": "kept"}], "new": [], "gone": []}
+
+
+def test_promises_pair_by_a_shared_message_whatever_question_or_extra_sources():
+    old = [{"plain": "导出的全部记录可以直接当备份", "status": "kept", "type": "ai_claim", "msgs": {"a1"}},
+           {"plain": "登录以后再做", "status": "pending", "type": "deferred", "msgs": {"u6"}}]
+    new = [{"plain": "登录功能以后再做", "status": "kept", "type": "deferred", "msgs": {"u6", "a9"}},
+           {"plain": "导出的 JSON 文件可以当备份用", "status": "kept", "type": "ai_claim", "msgs": {"a1"}},
+           {"plain": "数据存在 data.json", "status": "kept", "type": "ai_claim", "msgs": {"a2"}}]
+    pairs, fresh, gone = diff._pair_promises(old, new)
+    assert {(a["plain"], b["plain"]) for a, b in pairs} == {("导出的全部记录可以直接当备份", "导出的 JSON 文件可以当备份用"),
+                                                         ("登录以后再做", "登录功能以后再做")}
+    assert [n["plain"] for n in fresh] == ["数据存在 data.json"] and gone == []
