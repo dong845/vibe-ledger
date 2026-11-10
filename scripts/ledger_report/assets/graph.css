@@ -163,3 +163,21 @@ details.vlg-fn[open] summary{margin-bottom:4px}
   .vlg-canvas{height:55vh;flex:none}
   .vlg-panel{flex:none;overflow:visible;max-width:none;min-width:0;border-left:0;border-top:1px solid var(--g-line)}
 }
+/* function map: areas, the data they read and write */
+.vlg-node.r-item{--ni:var(--g-data)}
+.vlg-node.r-item .vlg-card{fill:#18221f}
+.vlg-edge.data{stroke-dasharray:5 4;stroke-opacity:.6}
+.vlg-edge-label.carries{fill:var(--g-data);font-weight:600}
+.vlg-area-row{display:block;width:100%;text-align:left;font:inherit;color:inherit;background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:10px 12px;margin:0 0 8px;cursor:pointer}
+.vlg-area-row:hover{border-color:var(--g-accent)}
+.vlg-area-row.s-warn{border-left:3px solid var(--g-warn)}.vlg-area-row.s-bad{border-left:3px solid var(--g-bad)}
+.vlg-area-head{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.vlg-area-plain{color:var(--g-muted);font-size:13.5px;margin-top:2px}
+.vlg-area-io{font-size:12.5px;color:var(--g-data);margin-top:3px;overflow-wrap:anywhere}
+.vlg-area-of{font-size:13.5px;color:var(--g-muted);margin:6px 0 0}
+.vlg-role.r-item{color:var(--g-data)}
+/* imports between parts: hidden on the closed map, shown for the part in focus (hover or select) */
+.vlg-edge.imp{stroke-opacity:0}.vlg-edge.imp.hot{stroke-opacity:.7}
+/* phone: the view switch and the tools would share one row and cover each other; the tools take a second row */
+@media (max-width:600px){.vlg-tools{top:52px;left:12px;right:12px;flex-wrap:wrap}}

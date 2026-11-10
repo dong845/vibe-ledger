@@ -658,6 +658,7 @@ def build(root, recs, probes) -> dict:
 
 
 def explain_pack(g: dict, root, probes) -> str:
+    import areas
     chosen = sorted((n for n in g["nodes"] if n["explain"]), key=lambda n: (-n["score"], n["id"]))
     uses, used_by = defaultdict(list), defaultdict(list)
     for e in g["edges"]:
@@ -693,7 +694,7 @@ def explain_pack(g: dict, root, probes) -> str:
             lines.append("")
     if not chosen:
         lines.append('_No file needs a detailed explanation; write `{"evidence": {}, "files": {}}`._')
-        return "\n".join(lines) + "\n"
+        return "\n".join(lines) + "\n" + ("\n" + areas.pack_section(g, root) if g["nodes"] else "")
     where = ("in `explain.json` after `vl.py merge` (one writer for the whole project, not one per group)"
              if len(groups) > 1 else "in `explain.json`")
     lines += ["## Journeys", "",
@@ -701,4 +702,4 @@ def explain_pack(g: dict, root, probes) -> str:
               "passes through in order, one plain sentence per step (references/explain-guide.md). Start from the "
               "entry points:", ""]
     lines += [f"- {e['path']} ({e['reason']})" for e in g["entries"]]
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines) + "\n\n" + areas.pack_section(g, root)

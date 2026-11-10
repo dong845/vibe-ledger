@@ -7,16 +7,23 @@
   var S = data.strings;
   var NS = "http://www.w3.org/2000/svg";
   var W = 236, H = 58, EXT_GAP = 100, ROW_GAP = 22, RANK_GAP = 72;
-  var ICON = { entry: "▶", logic: "ƒ", data: "⛁", paid: "✦", folder: "▤" };
+  var ICON = { entry: "▶", logic: "ƒ", data: "⛁", paid: "✦", folder: "▤", item: "◆" };
   var svg = document.getElementById("vlg-svg");
   var viewport = document.getElementById("vlg-viewport");
   var panel = document.getElementById("vlg-panel");
   var byId = {}, folderOf = {}, folderById = {};
   data.nodes.forEach(function (n) { byId[n.id] = n; });
+  // a function map (explain.json `areas`): the page opens on the areas, and the data view draws what they read and write
+  var AREAS = !!(data.areas && data.areas.length), flowArea = {};
+  if (AREAS) {
+    data.flow.items.forEach(function (it) { byId[it.id] = it; });
+    data.flow.areas.forEach(function (a) { flowArea[a] = true; });
+  }
+  var BASE = AREAS ? "map" : "files";
   var expanded = {}, selected = null, view = { s: 1, x: 0, y: 0 }, layout = null, fitted = false;
   // the view: "files" (folders only collapse in big projects), "modules" (everything folded into its module) or
   // "data" (only the files on a path from an entry to a data store or outside service)
-  var mode = "files", groups = [], grouped = false, seq = false, seqBox = null;
+  var mode = BASE, groups = [], grouped = false, seq = false, seqBox = null;
   var inFlow = {};
   ((data.data_flow || {}).files || []).forEach(function (id) { inFlow[id] = true; });
   function setGroups(list, on) {
@@ -27,8 +34,13 @@
     expanded = {};
     groups.forEach(function (f) { folderById[f.id] = f; f.files.forEach(function (id) { folderOf[id] = f.id; }); });
   }
-  setGroups(data.folders, data.collapsed);
-  function inView(id) { return mode !== "data" || isExt(id) || !!inFlow[id]; }
+  if (AREAS) setGroups(data.areas, true); else setGroups(data.folders, data.collapsed);
+  function isItem(id) { return id.indexOf("item:") === 0; }
+  function inView(id) {
+    if (isItem(id)) return AREAS && mode === "data";
+    if (AREAS && mode === "data") return isExt(id) || !!flowArea[folderOf[id]];
+    return mode !== "data" || isExt(id) || !!inFlow[id];
+  }
   var journey = null, journeyById = {}, hover = null, compare = false;
   (data.journeys || []).forEach(function (j) { journeyById[j.id] = j; });
   var pointers = {}, drag = null, pinch = null, moved = false;
@@ -43,29 +55,79 @@
   function visibleId(id) { var f = folderOf[id]; return grouped && f && !expanded[f] ? "folder:" + f : id; }
   function entity(vid) { return isFolder(vid) ? folderById[vid.slice(7)] : byId[vid]; }
   function roleOf(vid) { return isFolder(vid) ? "folder" : byId[vid].role; }
+  function areaMode() { return AREAS && (mode === "map" || mode === "data"); }
+  // a function map's data view, and its map while every area is closed, are short chains of a few boxes: they read
+  // top to bottom and fit the screen; an opened area brings back the left-to-right file chart, which suits many files
+  function topDown() {
+    if (!AREAS) return false;
+    if (mode === "data") return true;
+    return mode === "map" && !Object.keys(expanded).some(function (k) { return expanded[k]; });
+  }
 
   function computeLayout() {
     var g = new dagre.graphlib.Graph();
-    g.setGraph({ rankdir: "LR", nodesep: ROW_GAP, ranksep: RANK_GAP, marginx: 40, marginy: 40 });
+    var tb = topDown();
+    g.setGraph(tb ? { rankdir: "TB", nodesep: 34, ranksep: 44, marginx: 40, marginy: 40 }
+      : { rankdir: "LR", nodesep: ROW_GAP, ranksep: RANK_GAP, marginx: 40, marginy: 40 });
     g.setDefaultEdgeLabel(function () { return {}; });
     var visible = {}, edges = {};
-    data.nodes.forEach(function (n) {
+    var all = AREAS && mode === "data" ? data.nodes.concat(data.flow.items) : data.nodes;
+    all.forEach(function (n) {
       if (isExt(n.id) || !inView(n.id)) return;
       var v = visibleId(n.id);
       if (!visible[v]) { visible[v] = true; g.setNode(v, { width: W, height: H }); }
     });
-    data.edges.forEach(function (e) {
+    function link(e, carries) {
       if (!inView(e.from) || !inView(e.to)) return;
       var a = visibleId(e.from), b = isExt(e.to) ? e.to : visibleId(e.to);
       if (a === b) return;
       var k = a + "\u0001" + b;
-      var x = edges[k] || (edges[k] = { from: a, to: b, count: 0, risky: false, names: [] });
+      var x = edges[k] || (edges[k] = { from: a, to: b, count: 0, risky: false, names: [], carries: [] });
+      (carries || []).forEach(function (c) { if (x.carries.indexOf(c) < 0) x.carries.push(c); });
+      if (carries) return x;  // a data link is not an import: it does not count as one
       x.count += 1;
       x.risky = x.risky || e.risky;
       (e.names || []).forEach(function (nm) { if (x.names.indexOf(nm) < 0 && x.names.length < 6) x.names.push(nm); });
+      return x;
+    }
+    (AREAS && mode === "data" ? data.flow.edges : data.edges).forEach(function (e) { link(e); });
+    if (AREAS && mode === "map") data.area_links.forEach(function (l) { link(l, l.carries); });
+    // the map ranks its areas by where data goes (writer left of reader) when it knows any; imports only draw
+    var byData = AREAS && mode === "map" && Object.keys(edges).some(function (k) { return edges[k].carries.length; });
+    Object.keys(edges).forEach(function (k) {
+      var e = edges[k];
+      if (tb) {
+        if (byData && !e.carries.length && !isExt(e.to)) return;  // an import-only link is drawn, not ranked
+        [e.from, e.to].forEach(function (v) { if (!g.hasNode(v)) g.setNode(v, { width: W, height: H }); });
+        g.setEdge(e.from, e.to);
+      } else if (!isExt(e.to) && (!byData || e.carries.length)) g.setEdge(e.from, e.to);
     });
-    Object.keys(edges).forEach(function (k) { if (!isExt(edges[k].to)) g.setEdge(edges[k].from, edges[k].to); });
-    if (data.entries.length) {
+    if (tb) {
+      // parts no data passes through (shared libraries, an engine) would all crowd the first row: they go in their
+      // own rows under the chain, as the parts the others use
+      var loose = byData ? g.nodes().filter(function (v) { return !g.nodeEdges(v).length; }) : [];
+      if (loose.length === g.nodeCount()) loose = [];
+      loose.forEach(function (v) { g.removeNode(v); });
+      dagre.layout(g);
+      var tbBoxes = {}, x0 = Infinity, x1 = -Infinity, y1 = 40;
+      g.nodes().forEach(function (v) {
+        var p = g.node(v), b = { id: v, x: p.x - W / 2, y: p.y - H / 2 };
+        tbBoxes[v] = b;
+        x0 = Math.min(x0, b.x); x1 = Math.max(x1, b.x + W); y1 = Math.max(y1, b.y + H);
+      });
+      var support = null;
+      if (loose.length) {
+        var per = Math.min(3, loose.length), rowW = per * W + (per - 1) * 34;
+        if (x0 === Infinity) { x0 = 40; x1 = 40 + rowW; }
+        var left = (x0 + x1) / 2 - rowW / 2, top = y1 + 86;
+        loose.sort().forEach(function (v, i) {
+          tbBoxes[v] = { id: v, x: left + (i % per) * (W + 34), y: top + Math.floor(i / per) * (H + 26) };
+        });
+        support = { x: left, w: rowW, y: top - 30 };
+      }
+      return { g: g, edges: edges, boxes: tbBoxes, tb: true, support: support };
+    }
+    if (data.entries.length && !byData) {
       g.setNode("__src", { width: 1, height: 1 });
       var isEntry = {}, hasIn = {};
       data.entries.forEach(function (id) { var v = visibleId(id); isEntry[v] = true; if (visible[v]) g.setEdge("__src", v); });
@@ -97,7 +159,7 @@
   }
 
   function drawBands(list) {
-    if (!list.length) return;
+    if (!list.length || areaMode()) return;
     var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     list.forEach(function (b) { minX = Math.min(minX, b.x); maxX = Math.max(maxX, b.x + W); minY = Math.min(minY, b.y); maxY = Math.max(maxY, b.y + H); });
     var entryX = list.filter(function (b) { return !isExt(b.id) && roleOf(b.id) === "entry"; }).map(function (b) { return b.x; });
@@ -134,7 +196,7 @@
     g.appendChild(label);
     var sub = sv("text", { "class": "vlg-sub", x: 46, y: 42 });
     // in the data view a folder counts only the files the view draws
-    sub.textContent = isFolder(b.id) && mode === "data"
+    sub.textContent = isFolder(b.id) && mode === "data" && !AREAS
       ? fmt(S.g_folder_files, { n: ent.files.filter(inView).length }) : ent.sub || "";
     g.appendChild(sub);
     if (ent.badge) {
@@ -145,7 +207,7 @@
       g.appendChild(bt);
     }
     var title = sv("title", {});
-    title.textContent = isFolder(b.id) ? b.id.slice(7) : b.id;
+    title.textContent = isFolder(b.id) ? (ent.plain ? ent.label + " — " + ent.plain : b.id.slice(7)) : isItem(b.id) ? ent.label : b.id;
     g.appendChild(title);
     g.addEventListener("click", function (ev) { ev.stopPropagation(); if (!moved) onNodeClick(b.id); });
     g.addEventListener("keydown", function (ev) {
@@ -165,6 +227,12 @@
     while (viewport.firstChild) viewport.removeChild(viewport.firstChild);
     var boxes = layout.boxes, ids = Object.keys(boxes);
     drawBands(ids.map(function (v) { return boxes[v]; }));
+    if (layout.support) {  // the row of shared parts under the chain says what it is
+      var st = sv("text", { "class": "vlg-band-label", x: (layout.support.x + layout.support.w / 2).toFixed(1),
+        y: layout.support.y.toFixed(1), "text-anchor": "middle" });
+      st.textContent = S.g_support;
+      viewport.appendChild(st);
+    }
     var edgeLayer = sv("g", { "class": "vlg-edges" }), nodeLayer = sv("g", { "class": "vlg-nodes" });
     var labelLayer = sv("g", { "class": "vlg-edge-labels" });
     layout.cols = columnsOf(boxes);
@@ -172,10 +240,15 @@
       var e = layout.edges[k], a = boxes[e.from], b = boxes[e.to];
       return a && b ? { e: e, a: a, b: b, fwd: b.x > a.x, pa: a.y + H / 2, pb: b.y + H / 2 } : null;
     }).filter(Boolean);
-    assignPorts(routed.filter(function (r) { return Math.abs(r.a.x - r.b.x) > 1; }));
+    if (!layout.tb) assignPorts(routed.filter(function (r) { return Math.abs(r.a.x - r.b.x) > 1; }));
     routed.forEach(function (r) {
       var e = r.e, a = r.a, b = r.b, d, mid, ends;
-      if (Math.abs(a.x - b.x) <= 1) {
+      if (layout.tb) {
+        var tp = layout.g.hasEdge(e.from, e.to) ? layout.g.edge(e.from, e.to).points : straight(a, b), f1 = function (v) { return v.toFixed(1); };
+        d = "M" + tp.map(function (q) { return f1(q.x) + "," + f1(q.y); }).join(" L");
+        mid = tp[Math.floor(tp.length / 2)];
+        ends = [tp[0], tp[tp.length - 1]];
+      } else if (Math.abs(a.x - b.x) <= 1) {
         d = sideLoop(a, b);
         mid = { x: a.x + W + 30, y: (a.y + b.y + H) / 2 };
         ends = [{ x: a.x + W, y: a.y + H / 2 }, { x: b.x + W, y: b.y + H / 2 }];
@@ -188,21 +261,27 @@
         mid = { x: (m0.x + m1.x) / 2, y: (m0.y + m1.y) / 2 };
         ends = [pts[0], pts[pts.length - 1]];
       }
-      edgeLayer.appendChild(sv("path", { d: d, "class": "vlg-edge" + (e.risky ? " risky" : ""), "data-from": e.from,
+      var dataOnly = mode === "map" && e.carries && e.carries.length && !e.count;
+      var importOnly = mode === "map" && AREAS && !(e.carries && e.carries.length) && !isExt(e.to);
+      edgeLayer.appendChild(sv("path", { d: d, "class": "vlg-edge" + (e.risky ? " risky" : "") + (dataOnly ? " data" : "") + (importOnly ? " imp" : ""), "data-from": e.from,
         "data-to": e.to, "marker-end": "url(#vlg-arrow" + (e.risky ? "-risky" : "") + ")" }));
-      var carries = mode === "data" && (data.data_flow.labels || {})[e.from + "\u0001" + e.to];
+      var carries = mode === "map" && e.carries && e.carries.length ? e.carries.slice(0, 2).join(" · ") + (e.carries.length > 2 ? " …" : "")
+        : mode === "data" && !AREAS && (data.data_flow.labels || {})[e.from + "\u0001" + e.to];
       if (carries) {  // what this link sends, from the verified app map
-        var c = sv("text", { x: (ends[1].x - 10).toFixed(1), y: (ends[1].y - 7).toFixed(1), "class": "vlg-edge-label carries",
-          "text-anchor": "end", "data-from": e.from, "data-to": e.to });
+        var c = mode === "map"
+          ? sv("text", { x: mid.x.toFixed(1), y: (mid.y - 6).toFixed(1), "class": "vlg-edge-label carries", "text-anchor": "middle",
+              "data-from": e.from, "data-to": e.to })
+          : sv("text", { x: (ends[1].x - 10).toFixed(1), y: (ends[1].y - 7).toFixed(1), "class": "vlg-edge-label carries",
+              "text-anchor": "end", "data-from": e.from, "data-to": e.to });
         c.textContent = carries;
         labelLayer.appendChild(c);
       }
       // a link between folders stands for several imports: say how many in both views; names are for developers
-      var merged = (isFolder(e.from) || isFolder(e.to)) && e.count > 1;
+      var merged = (isFolder(e.from) || isFolder(e.to)) && e.count > 1 && !carries && !(AREAS && mode === "data");
       if (merged || e.names.length) {
         // imported names (developer view) appear only on the links of the file in focus — see placeNameLabel
         var t = sv("text", { x: mid.x.toFixed(1), y: (mid.y - 6).toFixed(1),
-          "class": "vlg-edge-label" + (merged ? "" : " names dev-only"), "text-anchor": "middle", "data-from": e.from,
+          "class": "vlg-edge-label" + (merged ? (mode === "map" ? " dev-only" : "") : " names dev-only"), "text-anchor": "middle", "data-from": e.from,
           "data-to": e.to, "data-sx": ends[0].x.toFixed(1), "data-sy": ends[0].y.toFixed(1),
           "data-ex": ends[1].x.toFixed(1), "data-ey": ends[1].y.toFixed(1) });
         t.textContent = merged ? fmt(S.g_merged, { n: e.count }) : shortNames(e.names);
@@ -360,6 +439,12 @@
   }
 
   // straight through a column, an S-curve with level ends in a gutter: arrows always arrive horizontally
+  function straight(a, b) {  // a link the top-down layout did not rank: border to border, the shortest way
+    if (b.y >= a.y + H) return [{ x: a.x + W / 2, y: a.y + H }, { x: b.x + W / 2, y: b.y }];
+    if (b.y + H <= a.y) return [{ x: a.x + W / 2, y: a.y }, { x: b.x + W / 2, y: b.y + H }];
+    return b.x > a.x ? [{ x: a.x + W, y: a.y + H / 2 }, { x: b.x, y: b.y + H / 2 }] : [{ x: a.x, y: a.y + H / 2 }, { x: b.x + W, y: b.y + H / 2 }];
+  }
+
   function pathOf(pts) {
     var f = function (v) { return v.toFixed(1); }, d = "M" + f(pts[0].x) + "," + f(pts[0].y);
     for (var i = 1; i < pts.length; i++) {
@@ -452,13 +537,13 @@
     var r = svg.getBoundingClientRect();
     if (!r.width || !r.height) return;
     var b = bbox(), s = Math.min((r.width - 40) / b.w, (r.height - 40) / b.h, 1.25);
-    s = Math.max(s, whole ? 0.15 : r.width < 560 ? 0.55 : 0.7);
+    s = Math.max(s, whole ? 0.15 : r.width < 560 ? 0.55 : areaMode() ? 0.6 : 0.7);
     var gw = b.w * s, gh = b.h * s;
     view.s = s;
     view.x = gw <= r.width ? (r.width - gw) / 2 - b.x * s : 12 - b.x * s;
     if (gh <= r.height) {
       view.y = (r.height - gh) / 2 - b.y * s;
-    } else if (seq) {
+    } else if (seq || (layout && layout.tb)) {
       view.y = 12 - b.y * s;  // a sequence reads from its top
     } else {
       var ys = data.entries.map(function (id) { return layout.boxes[visibleId(id)]; }).filter(Boolean)
@@ -501,7 +586,7 @@
   function select(id, center) {
     if (!byId[id]) return;
     leaveSequence();
-    if (!inView(id)) setMode("files");  // a file the data view leaves out opens where it is drawn
+    if (!inView(id)) setMode(BASE);  // a file the data view leaves out opens where it is drawn
     if (visibleId(id) !== id) { expanded[folderOf[id]] = true; draw(); }
     journey = null;
     selected = id;
@@ -516,7 +601,7 @@
     var j = journeyById[id];
     if (!j) return;
     leaveSequence();
-    if (j.steps.some(function (st) { return !inView(st.file); })) setMode("files");
+    if (j.steps.some(function (st) { return !inView(st.file); })) setMode(BASE);
     var grew = false;
     j.steps.forEach(function (st) {
       var f = folderOf[st.file];
@@ -675,7 +760,8 @@
     mode = m;
     selected = null;
     journey = null;
-    if (m === "modules") setGroups(data.modules || [], true);
+    if (AREAS && (m === "map" || m === "data")) setGroups(data.areas, true);
+    else if (m === "modules") setGroups(data.modules || [], true);
     else setGroups(data.folders, data.collapsed);
     document.querySelectorAll(".vlg-modes [data-mode]").forEach(function (b) { b.classList.toggle("on", b.getAttribute("data-mode") === m); });
     document.querySelectorAll('.vlg-tools [data-act="expand-all"], .vlg-tools [data-act="collapse-all"]').forEach(function (b) { b.hidden = !grouped; });
@@ -768,11 +854,16 @@
   function renderOverview() {
     if (!data.nodes.some(function (n) { return !isExt(n.id); })) panel.appendChild(el("p", "vlg-warnnote", S.g_no_files));
     if (mode === "modules") panel.appendChild(el("p", "vlg-modehint", S.g_modules_hint));
-    if (mode === "data") panel.appendChild(el("p", "vlg-modehint", (data.data_flow.files || []).length ? S.g_data_hint : S.g_data_empty));
+    if (AREAS && mode === "map") panel.appendChild(el("p", "vlg-modehint", S.g_map_hint));
+    else if (AREAS && mode === "data") panel.appendChild(el("p", "vlg-modehint", data.flow.items.length ? S.g_flow_hint : S.g_flow_empty));
+    else if (mode === "data") panel.appendChild(el("p", "vlg-modehint", (data.data_flow.files || []).length ? S.g_data_hint : S.g_data_empty));
     panel.appendChild(el("p", "vlg-purpose", data.summary));
-    var ul = el("ul", "vlg-howto");
-    data.howto.forEach(function (line) { ul.appendChild(el("li", null, line)); });
-    panel.appendChild(ul);
+    if (!AREAS) {  // the folder chart's reading guide; the map's own hint above replaces it
+      var ul = el("ul", "vlg-howto");
+      data.howto.forEach(function (line) { ul.appendChild(el("li", null, line)); });
+      panel.appendChild(ul);
+    }
+    if (AREAS) renderAreas();
     if (data.diff) renderDiff();
     if (data.requirements) {
       var rq = section(S.g_req_title);
@@ -803,10 +894,62 @@
     });
   }
 
+  function renderAreas() {
+    var sec = section(S.g_areas_title);
+    data.areas.forEach(function (a) {
+      var b = el("button", "vlg-area-row s-" + a.state);
+      b.type = "button";
+      var head = el("div", "vlg-area-head");
+      head.appendChild(el("b", null, a.label));
+      head.appendChild(el("span", "vlg-top-badge", a.badge || fmt(S.g_area_row, { n: a.count })));
+      b.appendChild(head);
+      b.appendChild(el("div", "vlg-area-plain", a.plain));
+      var io = (data.area_io || {})[a.id];
+      if (io) {
+        [["writes", S.g_area_writes], ["reads", S.g_area_reads], ["calls", S.g_area_calls]].forEach(function (k) {
+          if (io[k[0]].length) b.appendChild(el("div", "vlg-area-io", fmt(k[1], { names: io[k[0]].join("、") })));
+        });
+      }
+      b.addEventListener("click", function () {  // open this part in the map, in place
+        if (mode !== "map") setMode("map");
+        expanded[a.id] = true;
+        draw();
+        var ids = a.files.map(function (f) { return layout.boxes[f]; }).filter(Boolean);
+        if (ids.length) centerOn(ids[0].id); else fit();
+      });
+      sec.appendChild(b);
+    });
+  }
+
+  function renderItem() {
+    var it = byId[selected], close = el("button", "vlg-close", "×");
+    close.type = "button";
+    close.title = S.g_close;
+    close.addEventListener("click", clearSelection);
+    panel.appendChild(close);
+    panel.appendChild(el("h2", null, it.label));
+    panel.appendChild(el("span", "vlg-role r-item", S.g_role_item + " · " + it.kind));
+    if (it.plain) panel.appendChild(el("p", "vlg-purpose", it.plain));
+    [["writes", S.g_item_writes], ["reads", S.g_item_reads]].forEach(function (k) {
+      var sec = section(k[1]);
+      if (!it[k[0]].length) sec.appendChild(el("p", "vlg-muted", S.g_item_none));
+      it[k[0]].forEach(function (x) {
+        var row = el("details", "vlg-fn");
+        var sum = el("summary");
+        sum.appendChild(el("b", null, x.area + " "));
+        sum.appendChild(el("code", null, x.where));
+        row.appendChild(sum);
+        row.appendChild(el("pre", null, x.code));
+        sec.appendChild(row);
+      });
+    });
+  }
+
   function renderPanel() {
     while (panel.firstChild) panel.removeChild(panel.firstChild);
     if (journey) { renderJourney(); return; }
     if (!selected) { renderOverview(); return; }
+    if (isItem(selected)) { renderItem(); return; }
     var c = byId[selected].card, dev = document.body.classList.contains("dev");
     var close = el("button", "vlg-close", "×");
     close.type = "button";
@@ -819,6 +962,7 @@
       panel.appendChild(el("div", "vlg-devmeta", c.path + " · " + c.lines + " · " + fmt(S.g_exports_n, { n: c.exports.length })));
     }
     panel.appendChild(el("span", "vlg-role r-" + c.role, c.role_label));
+    if (c.area) panel.appendChild(el("p", "vlg-area-of", fmt(S.g_area_of, { name: c.area.name, plain: c.area.plain })));
     if (isExt(selected)) {
       panel.appendChild(el("p", "vlg-purpose", c.auto));
       if (c.called_by.length) chips(section(S.g_called_by), c.called_by);
@@ -1110,7 +1254,8 @@
   var wantTab = params.get("tab");
   showTab(wantTab && document.getElementById("tab-" + wantTab) && wantTab !== "graph" ? wantTab : "graph");
   var want = params.get("select"), wantJourney = params.get("journey");
-  if (params.get("mode") === "modules" || params.get("mode") === "data") setMode(params.get("mode"));
+  var wantMode = params.get("mode");
+  if (AREAS ? (wantMode === "data") : (wantMode === "modules" || wantMode === "data")) setMode(wantMode);
   if (params.get("compare") === "1" && data.diff) setCompare(true);
   if (wantJourney && journeyById[wantJourney]) { openJourney(wantJourney); if (params.get("seq") === "1") enterSequence(); }
   else if (want && byId[want]) select(want, true);

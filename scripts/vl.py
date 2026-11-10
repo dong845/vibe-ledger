@@ -447,7 +447,8 @@ def do_shot(args) -> int:
     journeys = load_json(explained).get("journeys", []) if explained.exists() else []
     paths = shot.take_shots(Path(report), run / "shots", chrome, select=top,
                             journey=journeys[0]["id"] if journeys else None,
-                            requirements="requests" in load_json(run / "run.json"))
+                            requirements="requests" in load_json(run / "run.json"),
+                            dataflow=bool(explained.exists() and (load_json(explained).get("function_map") or {}).get("areas")))
     for p in paths:
         print(f"Screenshot: {p}")
     if not paths:
@@ -458,6 +459,7 @@ def do_shot(args) -> int:
     print("NEXT: open every screenshot and check: the flowchart reads left to right and no cards overlap; the "
           "selected file's panel explains it; a journey shows numbered steps that follow the route; the overview diagrams are readable and the counts match the ledger; "
           "the requirements tab (requirements.png) lists the user's asks grouped by area with counts that match check; "
+          "with a function map, the flowchart opens on the project's parts and dataflow.png shows what they read and write, top to bottom; "
           "the phone view has no text running off the edge. Fix and re-render if not.")
     return 0 if ok else 1
 

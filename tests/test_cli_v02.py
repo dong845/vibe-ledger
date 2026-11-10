@@ -192,7 +192,7 @@ def test_shot_passes_the_top_file_and_reports_overlaps(env, capsys, monkeypatch)
     through_render(app)
     seen = {}
 
-    def fake_shots(report, out_dir, chrome, select=None, journey=None, requirements=False):
+    def fake_shots(report, out_dir, chrome, select=None, journey=None, requirements=False, dataflow=False):
         seen["select"], seen["journey"], seen["requirements"] = select, journey, requirements
         return [Path(out_dir) / "desktop.png"]
     monkeypatch.setattr(shot, "find_chrome", lambda: "/fake/chrome")
@@ -234,7 +234,7 @@ def test_shot_includes_the_first_journey(env, capsys, monkeypatch):
     assert vl.main(["render", "--project", str(app)]) == 0
     seen = {}
 
-    def fake_shots(report, out_dir, chrome, select=None, journey=None, requirements=False):
+    def fake_shots(report, out_dir, chrome, select=None, journey=None, requirements=False, dataflow=False):
         seen["journey"] = journey
         return [Path(out_dir) / "desktop.png"]
     monkeypatch.setattr(shot, "find_chrome", lambda: "/fake/chrome")

@@ -238,7 +238,7 @@ def render_html(ledger: dict, run: dict, probes: dict, lang: str, graph_data: di
            f'<input id="vlg-search" type="search" list="vlg-files" placeholder="{h(t(lang, "g_search"))}" autocomplete="off">'
            f'<datalist id="vlg-files"></datalist>{toggle}</header>')
     gjs = (ASSETS / "graph.js").read_text(encoding="utf-8")
-    doc = (head + f'<body class="tabbed">{top}<section id="tab-graph" class="vl-tabpanel">{render_graph_tab(lang)}</section>'
+    doc = (head + f'<body class="tabbed">{top}<section id="tab-graph" class="vl-tabpanel">{render_graph_tab(lang, bool(graph_data.get("areas")))}</section>'
            f'{req_tab}<section id="tab-overview" class="vl-tabpanel" hidden><div class="wrap">{"".join(body)}</div></section>'
            f'{data_script(graph_data)}<script>{js}</script>{DAGRE_SLOT}<script>{gjs}</script></body></html>')
     assert_no_secrets(doc)  # the vendored library is static, so it goes in after the check

@@ -94,6 +94,8 @@ def page_data(g: dict, explained: dict, ledger: dict, probes: dict, root, lang: 
               diff: dict | None = None, requirements: dict | None = None) -> dict:
     root = Path(root).resolve()
     reqs = panel_data(requirements, lang)
+    fmap = explained.get("function_map")
+    area_of = {p: a for a in (fmap or {}).get("areas", []) for p in a["files"]}
     risks, promises = _file_risks(ledger, probes, lang)
     calls, called_by = defaultdict(list), defaultdict(list)
     call_names, caller_names = defaultdict(dict), defaultdict(dict)  # which names each link imports (developer view)
@@ -154,6 +156,7 @@ def page_data(g: dict, explained: dict, ledger: dict, probes: dict, root, lang: 
             "snippets": _snippets(root, fid, (exp or {}).get("functions", [])),
             "positions": positions.get(fid, []),
             "requirements": reqs["by_file"].get(fid, []) if reqs else [],
+            "area": {"name": area_of[fid]["name"], "plain": area_of[fid]["plain"]} if fid in area_of else None,
         }
         sub = (exp["purpose_plain"] if exp else n["folder"] or "")
         card["diff_notes"] = _diff_notes(fid, diff, labels_by_id, lang)
@@ -199,7 +202,8 @@ def page_data(g: dict, explained: dict, ledger: dict, probes: dict, root, lang: 
             "journeys": journeys, "has_journeys": bool(journeys),
             "diff": _diff_summary(diff, labels_by_id, lang) if diff else None,
             "modules": _modules(g, risks, lang), "data_flow": _data_flow(g, ledger),
-            "requirements": {"line": reqs["line"], "unaccounted": reqs["unaccounted"]} if reqs else None}
+            "requirements": {"line": reqs["line"], "unaccounted": reqs["unaccounted"]} if reqs else None,
+            **_function_map(fmap, g, risks, lang)}
 
 
 def _modules(g: dict, risks: dict, lang: str) -> list[dict]:
@@ -221,6 +225,71 @@ def _modules(g: dict, risks: dict, lang: str) -> list[dict]:
         out.append({"id": mid, "files": files, "state": state, "badge": _badge(lang, state, bad, warn), "label": mid,
                     "short": fit(mid.rsplit("/", 1)[-1], LABEL_UNITS - 2) + " ▸", "sub": t(lang, "g_folder_files", n=len(files))})
     return out
+
+
+def _function_map(fmap: dict | None, g: dict, risks: dict, lang: str) -> dict:
+    """The map view's groups (one per area, plus "other"), the data links drawn between areas, and the data view's
+    nodes and edges. Empty when explain.json has no areas: the page then keeps the folder views."""
+    if not fmap or not fmap.get("areas"):
+        return {"areas": None, "area_links": [], "flow": None}
+    groups = []
+    for a in fmap["areas"] + ([{"id": "__other", "name": t(lang, "g_area_other_name"), "plain": t(lang, "g_area_other_plain"),
+                                "files": fmap["other"]}] if fmap["other"] else []):
+        state, bad, warn = _state([r for fid in a["files"] for r in risks.get(fid, [])])
+        groups.append({"id": a["id"], "files": a["files"], "state": state, "badge": _badge(lang, state, bad, warn),
+                       "label": a["name"], "plain": a["plain"], "count": len(a["files"]),
+                       "short": fit(a["name"], LABEL_UNITS - 2) + " ▸",
+                       "sub": fit(t(lang, "g_area_sub", n=len(a["files"]), plain=a["plain"]), SUB_UNITS)})
+    items = {it["id"]: it for it in fmap["items"]}
+    names = {a["id"]: a["name"] for a in fmap["areas"]}
+    writes, reads = defaultdict(list), defaultdict(list)
+    for f in fmap["flows"]:
+        (writes if f["op"] == "write" else reads)[f["item"]].append(f)
+    links: dict[tuple, dict] = {}
+    for iid, ws in writes.items():
+        for w in ws:
+            for r in reads.get(iid, []):
+                if w["area"] == r["area"]:
+                    continue
+                link = links.setdefault((w["area"], r["area"]), {"from": w["path"], "to": r["path"], "carries": []})
+                if items[iid]["name"] not in link["carries"]:
+                    link["carries"].append(items[iid]["name"])
+    externals = {x["id"]: x for x in g["externals"]}
+    owner = area_of_path(fmap)
+    io = defaultdict(lambda: {"reads": [], "writes": [], "calls": []})
+    for f in fmap["flows"]:
+        side = io[f["area"]]["writes" if f["op"] == "write" else "reads"]
+        if items[f["item"]]["name"] not in side:
+            side.append(items[f["item"]]["name"])
+    edges = []
+    for f in fmap["flows"]:
+        a, b = ("item:" + f["item"], f["path"]) if f["op"] == "read" else (f["path"], "item:" + f["item"])
+        edges.append({"from": a, "to": b, "names": [], "risky": False})
+    for e in g["edges"]:
+        if e["to"] in externals and e["from"] in owner:
+            edges.append({"from": e["from"], "to": e["to"], "names": [], "risky": False})
+            label = externals[e["to"]]["label"]
+            calls = io[owner[e["from"]]]["calls"]
+            if label not in calls:
+                calls.append(label)
+    kind_label = {k: t(lang, "g_kind_" + k) for k in ("input", "file", "output", "store")}
+    item_nodes = []
+    for it in fmap["items"]:
+        w = [{"area": names[f["area"]], "where": f"{f['path']}:{f['line']}", "code": f["snippet"]} for f in writes.get(it["id"], [])]
+        r = [{"area": names[f["area"]], "where": f"{f['path']}:{f['line']}", "code": f["snippet"]} for f in reads.get(it["id"], [])]
+        item_nodes.append({"id": "item:" + it["id"], "label": it["name"], "short": fit(it["name"], LABEL_UNITS),
+                           "sub": fit(it["plain"] or kind_label[it["kind"]], SUB_UNITS), "role": "item", "state": "ok",
+                           "badge": "", "kind": kind_label[it["kind"]], "plain": it["plain"], "writes": w, "reads": r})
+    flow_areas = sorted({f["area"] for f in fmap["flows"]} | {owner[e["from"]] for e in edges
+                                                              if e["from"] in owner and e["to"] in externals})
+    return {"areas": groups,
+            "area_links": [{"from": v["from"], "to": v["to"], "carries": v["carries"]} for v in links.values()],
+            "area_io": {k: v for k, v in io.items()},
+            "flow": {"items": item_nodes, "edges": edges, "areas": flow_areas}}
+
+
+def area_of_path(fmap: dict) -> dict:
+    return {p: a["id"] for a in fmap["areas"] for p in a["files"]}
 
 
 def _norm_service(name: str) -> str:
@@ -323,7 +392,7 @@ def _diff_summary(diff: dict, labels: dict, lang: str) -> dict:
     }
 
 
-def render_graph_tab(lang: str) -> str:
+def render_graph_tab(lang: str, function_map: bool = False) -> str:
     legend = "".join(f'<span class="vlg-legend-item k-{k}">{h(t(lang, key))}</span>'
                      for k, key in (("bad", "g_legend_bad"), ("warn", "g_legend_warn"), ("paid", "g_legend_paid"),
                                     ("folder", "g_legend_folder")))
@@ -333,8 +402,11 @@ def render_graph_tab(lang: str) -> str:
     folder_tools = "".join(f'<button type="button" data-act="{act}" hidden>{h(t(lang, key))}</button>'
                            for act, key in (("expand-all", "g_expand_all"), ("collapse-all", "g_collapse_all"),
                                             ("compare", "g_compare")))
-    modes = "".join(f'<button type="button" data-mode="{m}"{" class=\"on\"" if m == "files" else ""}>{h(t(lang, key))}</button>'
-                    for m, key in (("files", "g_mode_files"), ("modules", "g_mode_modules"), ("data", "g_mode_data")))
+    # with a function map: one layered map (areas that open into their files) and the data view; else the folder views
+    choices = ((("map", "g_mode_map"), ("data", "g_mode_flow")) if function_map else
+               (("files", "g_mode_files"), ("modules", "g_mode_modules"), ("data", "g_mode_data")))
+    modes = "".join(f'<button type="button" data-mode="{m}"{" class=\"on\"" if i == 0 else ""}>{h(t(lang, key))}</button>'
+                    for i, (m, key) in enumerate(choices))
     export = (f'<button type="button" data-act="export">{h(t(lang, "g_export"))}</button>'
               '<div class="vlg-export-menu" hidden>'
               f'<button type="button" data-fmt="png">{h(t(lang, "g_export_png"))}</button>'

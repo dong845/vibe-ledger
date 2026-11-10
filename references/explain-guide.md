@@ -31,13 +31,23 @@ Files explained one by one do not show how they work together. Also write 2–4 
 
 With several explanation groups, journeys span the groups: write them once, in `explain.json`, after `vl.py merge`.
 
-## 4. Paths, groups and empty packs
+## 4. The function map: areas, data, flows
+
+The flowchart opens on the project's parts, not its folders, so write these three once for the whole project (with several explanation groups: in `explain.json`, once the parts are merged). The end of `explain_pack.md` lists every file by folder and the lines where the code names a data file.
+
+- `areas` — 2–10 parts of the project as its user would name them: "配音", "渲染", "交付检查", "行程页面", "日历". Each is `{"id", "name", "plain", "match"}`: `plain` is one sentence on what the part does for the user; `match` lists what it covers — a folder ending in `/` (`scripts/qa/`), a glob (`scripts/*_qa.py`) or an exact path. Order matters: **a file goes to the first area that matches it**, so list narrow areas before broad ones and end with a catch-all only if it is a real part. A file no area matches is drawn under "Other" — few is fine; many means the areas are wrong. Group by what a part does, not by where it sits: when everything is in one folder, use globs and paths.
+- `items` — the data and outputs that move between the parts: inputs the user gives, working files, outputs, stores. `{"id", "name", "plain", "kind", "match"}`; `kind` is `input`, `file`, `output` or `store`; `match` lists the spellings the code uses for it (`["storyboard.json"]`, `["out.mp4", "out.nobgm.mp4"]`). Outside services (APIs) are added from the imports; do not write them.
+- `flows` — who reads or writes each item: `{"area", "item", "op", "path", "line", "snippet"}`; `op` is `read` or `write`; `path`, `line` and `snippet` are one line of code that does it, copied exactly (the candidates in the pack are a good start). `check` keeps a flow only when the line is in the file (±3 lines), the file belongs to that area, and the line names the item (one of its `match` spellings). Write the one line that decides it, not a comment.
+
+A part that writes an item and another that reads it are joined on the map by a link that says what passes ("storyboard.json"), dashed when no import joins them. The 数据流 / Data flow view draws the parts, the items between them and the outside services.
+
+## 5. Paths, groups and empty packs
 
 - Use paths exactly as the pack prints them (relative to the project, forward slashes). An entry whose path is not in the graph is rejected as a whole.
 - When the pack lists more than 8 files it splits them into groups. Each group writes `<run>/parts/explain_NN.json` in this same format (give each group to its own subagent, or do them one by one); evidence ids only need to be unique within one part. `vl.py merge` combines the parts into `explain.json`; a file explained twice keeps the first explanation.
 - When the pack lists no files, write `{"evidence": {}, "files": {}}` — `check` needs the file to exist.
 
-## 5. Example
+## 6. Example
 
 ```json
 {
@@ -67,12 +77,25 @@ With several explanation groups, journeys span the groups: write them once, in `
       ],
       "outcome": "总结出现在笔记下面"
     }
+  ],
+  "areas": [
+    {"id": "page", "name": "笔记页面", "plain": "你看到和操作的页面", "match": ["app/page.tsx"]},
+    {"id": "api", "name": "总结接口", "plain": "把笔记交给 OpenAI，取回总结", "match": ["app/api/"]},
+    {"id": "store", "name": "数据库连接", "plain": "读写你的笔记", "match": ["lib/"]}
+  ],
+  "items": [
+    {"id": "notes", "name": "笔记", "plain": "你写的笔记", "kind": "store", "match": ["notes"]}
+  ],
+  "flows": [
+    {"area": "api", "item": "notes", "op": "read", "path": "app/api/summarize/route.ts", "line": 6,
+     "snippet": "const { notes } = await req.json();"}
   ]
 }
 ```
 
-## 6. What `check` does with it
+## 7. What `check` does with it
 
 - A format problem (missing `purpose_plain`, a line that is not a number, an unknown evidence id) is listed and `check` exits with code 2. Fix it and run `check` again.
+- Areas: every file goes to the first area that matches it; an area that ends up with no file is dropped, and a pattern that matches nothing is listed. A flow whose line is missing, sits in another area's file, or does not name its item is dropped with the reason; an item left without flows is dropped.
 - Function names are looked up in the file: kept, line-corrected or dropped. Backticked names are looked up in the project. History quotes are looked up in the conversations.
 - The result goes to `explain.verified.json`, which `render` uses. Fix a mis-copied line or quote only by copying from the real file or message; a dropped name is the honest result, not something to work around.

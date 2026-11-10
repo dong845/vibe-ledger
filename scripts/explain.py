@@ -8,6 +8,7 @@ import copy
 import re
 from pathlib import Path
 
+import areas
 from common import is_within, read_text
 from graph import strip_comments
 from verify import check_transcript
@@ -87,6 +88,7 @@ def validate(doc) -> None:
                 if i not in ev:
                     p.append(f"{where} history: unknown evidence id {i}")
     p += _journey_problems(doc.get("journeys", []))
+    p += areas.problems(doc)
     if p:
         raise ExplainError(p)
 
@@ -325,6 +327,7 @@ def verify(doc: dict, g: dict, root, index: dict) -> dict:
     out["files"] = files
     out["rejected"] = rejected
     out["journeys"], out["rejected_journeys"] = _verify_journeys(out.get("journeys", []), g, root, defs_of)
+    out["function_map"] = areas.verify(out, g, root)
     out["verification"] = {
         "journeys": len(out["journeys"]), "journeys_rejected": len(out["rejected_journeys"]),
         "journey_steps_dropped": sum(len(j["dropped_steps"]) for j in out["journeys"]),
@@ -376,4 +379,4 @@ def summary_lines(verified: dict) -> list[str]:
         lines += [f"  - {j['title']}: dropped {d['file']} — {d['reason']}" for d in j["dropped_steps"]]
         lines += [f"  - {j['title']}: {st['file']} {st['dropped_function']['name']} — {st['dropped_function']['reason']}"
                   for st in j["steps"] if "dropped_function" in st]
-    return lines
+    return lines + areas.summary_lines(verified.get("function_map"))
