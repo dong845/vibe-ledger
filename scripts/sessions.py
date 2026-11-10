@@ -408,7 +408,7 @@ def _number(records: list[dict]) -> None:
 _ANALYSIS = re.compile(r"\bvl\.py\s+(?:start|merge|check|render|shot)\b")
 # vibe-ledger's own work files: a helper given one of these (a subagent writing explanations) is analysing,
 # not building, even though it never runs vl.py itself
-_ANALYSIS_FILES = re.compile(r"\b(?:explain_pack\.md|reading_pack_\d+\.md|(?:ledger|explain)\.verified\.json)\b")
+_ANALYSIS_FILES = re.compile(r"\b(?:explain_pack\.md|reading_pack_\d+\.md|requests_\d+\.md|(?:ledger|explain|requirements)\.verified\.json)\b")
 
 
 def _before_analysis(records: list[dict]) -> list[dict]:
@@ -420,20 +420,40 @@ def _before_analysis(records: list[dict]) -> list[dict]:
     return records
 
 
+def _neutral_dirs() -> tuple[Path, ...]:
+    """Folders an assistant works in that belong to no project: its own memory and session folders. (Not temp
+    folders: a project can live there.)"""
+    home = Path.home()
+    return (home / ".claude" / "projects", home / ".codex")
+
+
 def _claim(records: list[dict], root: Path) -> list[dict]:
     """The records of one thread that concern `root`; [] when the thread never touches it."""
     touches = any(is_within(f, root) for r in records for f in r["files"])
     if not touches and not any(is_within(r["cwd"], root) for r in records if r["cwd"]):
         return []
-    kept = []
     for r in records:
         cwd = r["cwd"]
         r["in_project"] = ((bool(cwd) and is_within(cwd, root))
                            or any(is_within(f, root) for f in r["files"])
                            or (touches and bool(cwd) and is_within(root, cwd)))
-        if r["in_project"]:
-            kept.append(r)
-    return kept
+    # What the user typed stays when the turn it starts works on this project, or when it was typed while the
+    # assistant's folder had wandered somewhere neutral (its memory folder) and the thread was
+    # last working here — a requirement must not be lost because the working folder moved. A message typed
+    # from another project's folder whose turn never touches this one stays out.
+    turn_hits = {r["turn"] for r in records if r["in_project"]}
+    neutral = _neutral_dirs()
+    here = False  # was the thread last working on this project?
+    for r in records:
+        cwd = r["cwd"]
+        if r["role"] == "user" and r["kind"] == "text" and not r["in_project"]:
+            wandered = bool(cwd) and any(is_within(cwd, d) for d in neutral)
+            r["in_project"] = r["turn"] in turn_hits or (wandered and here)
+        if cwd and not any(is_within(cwd, d) for d in neutral):
+            here = is_within(cwd, root) or is_within(root, cwd)
+        if any(is_within(f, root) for f in r["files"]):
+            here = True
+    return [r for r in records if r["in_project"]]
 
 
 def _archive_name(thread: str) -> str:

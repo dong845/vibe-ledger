@@ -62,6 +62,7 @@ def through_render(app):
     run = start(app)
     put(run, "ledger.json", LEDGER)
     put(run, "explain.json", EXPLAIN)
+    put(run, "requirements.json", {"evidence": {}, "requirements": []})
     assert vl.main(["check", "--project", str(app)]) == 0
     assert vl.main(["render", "--project", str(app)]) == 0
     return run
@@ -123,10 +124,12 @@ def test_check_lists_explain_problems_then_drops_invented_functions(env, capsys)
     run = start(app)
     put(run, "ledger.json", LEDGER)
     put(run, "explain.json", {"files": {"lib/ai.ts": {"functions": []}}})
+    put(run, "requirements.json", {"evidence": {}, "requirements": []})
     capsys.readouterr()
     assert vl.main(["check", "--project", str(app)]) == 2
     assert "purpose_plain must be a non-empty string" in capsys.readouterr().out
     put(run, "explain.json", EXPLAIN)
+    put(run, "requirements.json", {"evidence": {}, "requirements": []})
     assert vl.main(["check", "--project", str(app)]) == 0
     out = capsys.readouterr().out
     assert "Functions dropped: 1" in out and "sendEmail — not defined in this file" in out and "render --project" in out
@@ -151,6 +154,7 @@ def test_check_on_a_run_without_graph_asks_to_start_again(env, capsys):
     run = start(app)
     put(run, "ledger.json", LEDGER)
     put(run, "explain.json", EXPLAIN)
+    put(run, "requirements.json", {"evidence": {}, "requirements": []})
     (run / "graph.json").unlink()
     capsys.readouterr()
     assert vl.main(["check", "--project", str(app)]) == 2
@@ -177,6 +181,7 @@ def test_project_without_code_files_still_renders(env, capsys):
     assert "File graph: 0 files" in capsys.readouterr().out
     put(run, "ledger.json", LEDGER)
     put(run, "explain.json", {"evidence": {}, "files": {}})
+    put(run, "requirements.json", {"evidence": {}, "requirements": []})
     assert vl.main(["check", "--project", str(app)]) == 0
     assert vl.main(["render", "--project", str(app)]) == 0
     assert '"g_no_files"' in (run / "report.html").read_text(encoding="utf-8")
@@ -187,8 +192,8 @@ def test_shot_passes_the_top_file_and_reports_overlaps(env, capsys, monkeypatch)
     through_render(app)
     seen = {}
 
-    def fake_shots(report, out_dir, chrome, select=None, journey=None):
-        seen["select"], seen["journey"] = select, journey
+    def fake_shots(report, out_dir, chrome, select=None, journey=None, requirements=False):
+        seen["select"], seen["journey"], seen["requirements"] = select, journey, requirements
         return [Path(out_dir) / "desktop.png"]
     monkeypatch.setattr(shot, "find_chrome", lambda: "/fake/chrome")
     monkeypatch.setattr(shot, "take_shots", fake_shots)
@@ -196,7 +201,7 @@ def test_shot_passes_the_top_file_and_reports_overlaps(env, capsys, monkeypatch)
     capsys.readouterr()
     assert vl.main(["shot", "--project", str(app)]) == 1
     out = capsys.readouterr().out
-    assert seen["select"] == "lib/ai.ts" and seen["journey"] is None
+    assert seen["select"] == "lib/ai.ts" and seen["journey"] is None and seen["requirements"] is True
     assert "Layout check FAILED" in out and "app/page.tsx ↔ lib/ai.ts" in out
     monkeypatch.setattr(shot, "dump_dom", lambda chrome, url, timeout=90: "")
     assert vl.main(["shot", "--project", str(app)]) == 1
@@ -212,7 +217,8 @@ def test_shots_in_a_real_browser(env, capsys):
     assert vl.main(["shot", "--project", str(app)]) == 0
     out = capsys.readouterr().out
     names = {Path(m.strip()).name for m in re.findall(r"Screenshot: (.+)", out)}
-    assert names == {"desktop.png", "desktop-dark.png", "phone-390.png", "selected.png", "overview.png"}
+    assert names == {"desktop.png", "desktop-dark.png", "phone-390.png", "selected.png", "overview.png",
+                     "requirements.png"}
     assert "none overlap; selected lib/ai.ts" in out
 
 
@@ -222,12 +228,13 @@ def test_shot_includes_the_first_journey(env, capsys, monkeypatch):
     put(run, "ledger.json", LEDGER)
     put(run, "explain.json", {**EXPLAIN, "journeys": [{"title": "你点「总结」时", "steps": [
         {"file": "app/page.tsx", "plain": "页面交出文字"}, {"file": "lib/ai.ts", "plain": "发给 OpenAI"}]}]})
+    put(run, "requirements.json", {"evidence": {}, "requirements": []})
     assert vl.main(["check", "--project", str(app)]) == 0
     assert "Journeys: 1 kept" in capsys.readouterr().out
     assert vl.main(["render", "--project", str(app)]) == 0
     seen = {}
 
-    def fake_shots(report, out_dir, chrome, select=None, journey=None):
+    def fake_shots(report, out_dir, chrome, select=None, journey=None, requirements=False):
         seen["journey"] = journey
         return [Path(out_dir) / "desktop.png"]
     monkeypatch.setattr(shot, "find_chrome", lambda: "/fake/chrome")

@@ -40,6 +40,7 @@ def test_medium_project_renders_without_overlaps_in_a_real_browser(env, capsys):
     (run / "explain.json").write_text(json.dumps({"evidence": {}, "files": {"src/api/a0.ts": {
         "purpose_plain": "把用户的问题发给 OpenAI。", "functions": [{"name": "ask0", "line": 4, "plain": "发问题"}]}}},
         ensure_ascii=False), encoding="utf-8")
+    (run / "requirements.json").write_text(json.dumps({"evidence": {}, "requirements": []}), encoding="utf-8")
     assert vl.main(["check", "--project", str(app)]) == 0
     assert vl.main(["render", "--project", str(app)]) == 0
     page = (run / "report.html").as_uri()

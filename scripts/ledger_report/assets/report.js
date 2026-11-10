@@ -19,6 +19,20 @@
       });
     });
   });
+  var PROBLEMS = ["missing", "partial", "changed"];
+  document.querySelectorAll("[data-rfilter]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var s = b.getAttribute("data-rfilter");
+      document.querySelectorAll("[data-rfilter]").forEach(function (x) { x.classList.toggle("on", x === b); });
+      document.querySelectorAll(".req-card").forEach(function (c) {
+        var st = c.getAttribute("data-rstatus");
+        c.hidden = !(s === "all" || st === s || (s === "problems" && PROBLEMS.indexOf(st) >= 0));
+      });
+      document.querySelectorAll(".req-area").forEach(function (a) {
+        a.hidden = !a.querySelector(".req-card:not([hidden])");
+      });
+    });
+  });
   function done(b) { b.textContent = b.getAttribute("data-done"); }
   document.querySelectorAll("button.copy").forEach(function (b) {
     b.addEventListener("click", function () {

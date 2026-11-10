@@ -774,6 +774,15 @@
     data.howto.forEach(function (line) { ul.appendChild(el("li", null, line)); });
     panel.appendChild(ul);
     if (data.diff) renderDiff();
+    if (data.requirements) {
+      var rq = section(S.g_req_title);
+      rq.appendChild(el("p", null, data.requirements.line));
+      if (data.requirements.unaccounted) rq.appendChild(el("p", "vlg-warnnote", fmt(S.g_req_unaccounted, { n: data.requirements.unaccounted })));
+      var open = el("button", "vlg-chip", S.g_req_open);
+      open.type = "button";
+      open.addEventListener("click", function () { showTab("requirements"); });
+      rq.appendChild(open);
+    }
     if (data.journeys && data.journeys.length) {
       var js = section(S.g_journeys);
       data.journeys.forEach(function (j) {
@@ -877,6 +886,17 @@
         a.addEventListener("click", function () { showTab("overview"); });
         row.appendChild(a);
         ps.appendChild(row);
+      });
+    }
+    if (c.requirements && c.requirements.length) {
+      var qs = section(S.g_requirements);
+      c.requirements.forEach(function (q) {
+        var row = el("div", "vlg-promise", q.glyph + " " + q.plain + " ");
+        var a = el("a", null, S.g_req_open);
+        a.href = "#" + q.id;
+        a.addEventListener("click", function () { showTab("requirements"); });
+        row.appendChild(a);
+        qs.appendChild(row);
       });
     }
     var hs = section(S.g_history);
@@ -1043,6 +1063,14 @@
     document.querySelectorAll(".vl-tab").forEach(function (b) {
       b.addEventListener("click", function () { showTab(b.getAttribute("data-tab")); });
     });
+    document.querySelectorAll(".req-file").forEach(function (b) {  // a file named under a requirement opens it in the flowchart
+      b.addEventListener("click", function () {
+        var id = b.getAttribute("data-file");
+        if (!byId[id]) return;
+        showTab("graph");
+        select(id, true);
+      });
+    });
     var search = document.getElementById("vlg-search"), list = document.getElementById("vlg-files");
     if (list) data.nodes.forEach(function (n) { var o = document.createElement("option"); o.value = isExt(n.id) ? n.label : n.id; list.appendChild(o); });
     if (search) {
@@ -1079,7 +1107,8 @@
   wire();
   draw();
   var params = new URLSearchParams(location.search);
-  showTab(params.get("tab") === "overview" ? "overview" : "graph");
+  var wantTab = params.get("tab");
+  showTab(wantTab && document.getElementById("tab-" + wantTab) && wantTab !== "graph" ? wantTab : "graph");
   var want = params.get("select"), wantJourney = params.get("journey");
   if (params.get("mode") === "modules" || params.get("mode") === "data") setMode(params.get("mode"));
   if (params.get("compare") === "1" && data.diff) setCompare(true);

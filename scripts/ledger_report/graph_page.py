@@ -10,6 +10,7 @@ from common import read_text
 from graph import folder_groups
 from ledger_report.bits import GLYPH, fit, fmt_date, h
 from ledger_report.i18n import STR, probe_message, t
+from ledger_report.requirements_html import panel_data
 from redact import redact
 
 VENDOR_DIR = Path(__file__).resolve().parent / "vendor"
@@ -90,8 +91,9 @@ def _snippets(root: Path, path: str, functions) -> list[dict]:
 
 
 def page_data(g: dict, explained: dict, ledger: dict, probes: dict, root, lang: str, has_transcripts: bool,
-              diff: dict | None = None) -> dict:
+              diff: dict | None = None, requirements: dict | None = None) -> dict:
     root = Path(root).resolve()
+    reqs = panel_data(requirements, lang)
     risks, promises = _file_risks(ledger, probes, lang)
     calls, called_by = defaultdict(list), defaultdict(list)
     call_names, caller_names = defaultdict(dict), defaultdict(dict)  # which names each link imports (developer view)
@@ -151,6 +153,7 @@ def page_data(g: dict, explained: dict, ledger: dict, probes: dict, root, lang: 
                        last=fmt_date(edits["last"])[:10]) if edits else "",
             "snippets": _snippets(root, fid, (exp or {}).get("functions", [])),
             "positions": positions.get(fid, []),
+            "requirements": reqs["by_file"].get(fid, []) if reqs else [],
         }
         sub = (exp["purpose_plain"] if exp else n["folder"] or "")
         card["diff_notes"] = _diff_notes(fid, diff, labels_by_id, lang)
@@ -195,7 +198,8 @@ def page_data(g: dict, explained: dict, ledger: dict, probes: dict, root, lang: 
                             for r in explained.get("rejected_journeys", [])]},
             "journeys": journeys, "has_journeys": bool(journeys),
             "diff": _diff_summary(diff, labels_by_id, lang) if diff else None,
-            "modules": _modules(g, risks, lang), "data_flow": _data_flow(g, ledger)}
+            "modules": _modules(g, risks, lang), "data_flow": _data_flow(g, ledger),
+            "requirements": {"line": reqs["line"], "unaccounted": reqs["unaccounted"]} if reqs else None}
 
 
 def _modules(g: dict, risks: dict, lang: str) -> list[dict]:

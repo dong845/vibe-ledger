@@ -40,7 +40,7 @@ def _shoot(chrome: str, url: str, out: Path, width: int, height: int) -> bool:
 
 
 def take_shots(report: Path, out_dir: Path, chrome: str, select: str | None = None, journey: str | None = None,
-               height: int = 6000) -> list[Path]:
+               height: int = 6000, requirements: bool = False) -> list[Path]:
     report = Path(report).resolve()
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -59,6 +59,8 @@ def take_shots(report: Path, out_dir: Path, chrome: str, select: str | None = No
     if journey:
         jobs.append((url + f"?journey={quote(journey)}", "journey.png", GRAPH_W, GRAPH_H))
     jobs.append((url + "?tab=overview", "overview.png", 1280, height))
+    if requirements:
+        jobs.append((url + "?tab=requirements", "requirements.png", 1280, height))
     return [out_dir / name for u, name, w, h in jobs if _shoot(chrome, u, out_dir / name, w, h)]
 
 

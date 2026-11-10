@@ -235,3 +235,27 @@ def test_helpers_working_on_vibe_ledger_files_are_analysis_too(tmp_path):
     reader.save(tmp_path / "projects")
     recs, _ = run(app, tmp_path)
     assert {r["session"] for r in recs} == {"s1"}
+
+
+def test_typed_requests_survive_a_wandering_working_folder(tmp_path):
+    """The assistant cd'd into its memory folder; what the user typed next is still this project's."""
+    from pathlib import Path as P
+    app, other = tmp_path / "app", tmp_path / "other"
+    (app / "lib").mkdir(parents=True)
+    other.mkdir()
+    s = ClaudeSession(app, "s-wander")
+    s.user("做一个笔记应用")
+    s.edit(app / "lib/a.ts", "x", "y")
+    s.set_cwd(P.home() / ".claude" / "projects" / "-x" / "memory")
+    kept = s.user("只用 kiwi 就可以了")  # typed from a neutral folder; the thread was last working on app
+    s.assistant_text("好的")
+    s.set_cwd(other)
+    gone = s.user("给 other 项目加个按钮")  # another project's folder, and the turn never touches app
+    s.write(other / "b.ts", "button")
+    linked = s.user("顺便把 app 的标题改了")  # another folder, but the turn edits app
+    s.edit(app / "lib/a.ts", "y", "z")
+    s.save(tmp_path / "claude" / "projects")
+    recs, _ = sessions.collect(app, tmp_path / "claude", tmp_path / "codex")
+    ids = {r["id"] for r in recs if r["role"] == "user"}
+    assert kept in ids and linked in ids and gone not in ids
+    assert not any(r["text"] == "button" or "b.ts" in r["text"] for r in recs)

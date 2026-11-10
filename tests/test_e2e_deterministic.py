@@ -89,6 +89,7 @@ def test_fabricated_ledger_draws_nothing_and_counts_nothing(prepared, tmp_path, 
     }
     (run / "ledger.json").write_text(json.dumps(fake, ensure_ascii=False), encoding="utf-8")
     (run / "explain.json").write_text(json.dumps({"evidence": {}, "files": {}}), encoding="utf-8")
+    (run / "requirements.json").write_text(json.dumps({"evidence": {}, "requirements": []}), encoding="utf-8")
     assert vl.main(["check", "--project", str(f["project"])]) == 0
     out = load_json(run / "ledger.verified.json")
     assert {p["status"] for p in out["promises"]} == {"unknown"}

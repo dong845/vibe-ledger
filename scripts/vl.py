@@ -22,6 +22,7 @@ import explain  # noqa: E402
 import graph  # noqa: E402
 import probes  # noqa: E402
 import render  # noqa: E402
+import requirements  # noqa: E402
 import sessions  # noqa: E402
 import shot  # noqa: E402
 import verify  # noqa: E402
@@ -34,6 +35,7 @@ from ledger_report.i18n import t  # noqa: E402
 
 GUIDE = SELF.parent.parent / "references" / "extraction-guide.md"
 EXPLAIN_GUIDE = SELF.parent.parent / "references" / "explain-guide.md"
+REQ_GUIDE = SELF.parent.parent / "references" / "requirements-guide.md"
 
 
 def cmd(*args) -> str:
@@ -108,6 +110,12 @@ def do_start(args) -> int:
         (run / name).write_text(text, encoding="utf-8")
         packs.append(name)
     write_json(run / "candidates.json", cands)
+    req_texts, req_info = requirements.build_packs(root, recs)
+    req_info["packs"] = []
+    for k, text in enumerate(req_texts, 1):
+        name = f"requests_{k:02d}.md"
+        (run / name).write_text(text, encoding="utf-8")
+        req_info["packs"].append(name)
     pr = probes.run_all(root)
     write_json(run / "probes.json", pr)
     g = graph.build(root, recs, pr)
@@ -122,7 +130,7 @@ def do_start(args) -> int:
         "sessions": stats.to_dict(), "candidates": cands["stats"],
         "probes": {"ran": pr["ran"], "skipped": pr["skipped"], "stack": pr["stack"]},
         "graph": graph_stats(g),
-        "packs": packs, "unattributed": unattributed(root, recs),
+        "packs": packs, "requests": req_info, "unattributed": unattributed(root, recs),
         "retention": {"days": days, "source": source, "settings_path": str(claude_settings_path()),
                       "earliest": min(claude_ts) if claude_ts else ""},
     }
@@ -147,6 +155,9 @@ def _print_start(m: dict, run: Path, root: Path) -> None:
     if p["stack"]["unsupported"]:
         print(f"Not covered by probes: {', '.join(p['stack']['unsupported'])}")
     print(f"Reading packs: {len(m['packs'])} ({', '.join(f'{n} {k:,} chars' for n, k in zip(m['packs'], c['pack_chars']))})")
+    q = m["requests"]
+    print(f"Requests: {q['messages']} messages the user typed, in {len(q['packs'])} pack(s) "
+          f"({', '.join(f'{n} {k:,} chars' for n, k in zip(q['packs'], q['chars']))})")
     print(f"Report language: {m['lang']}")
     r = m["retention"]
     print(f"Claude Code keeps transcripts for {r['days']} days ({r['source']}).")
@@ -162,7 +173,7 @@ def _print_start(m: dict, run: Path, root: Path) -> None:
         print("NEXT (only after the user agrees — it edits their Claude Code settings):")
         print("  " + cmd("retention", "--set", 365))
     parts, pack = run / "parts", run / "explain_pack.md"
-    print("NEXT: write two files, then run the checks.")
+    print("NEXT: write three files, then run the checks.")
     if len(m["packs"]) == 1:
         print(f"  1. Ledger: read {run / m['packs'][0]}, {run / 'probes.json'} and the project code; write "
               f"{run / 'ledger.json'} as {GUIDE} describes.")
@@ -170,13 +181,21 @@ def _print_start(m: dict, run: Path, root: Path) -> None:
         print(f"  1. Ledger: give each reading pack in {run} to its own subagent (or do them one by one). Each writes "
               f"{parts}/part_NN.json with evidence, promises and compromises only ({GUIDE}). After the merge below, "
               f"add map, access and paths to {run / 'ledger.json'}.")
+    if not q["messages"]:
+        print("  2. Requirements: there are no user messages, so skip requirements.json.")
+    elif len(q["packs"]) == 1:
+        print(f"  2. Requirements: read {run / q['packs'][0]} and the code it is about; write "
+              f"{run / 'requirements.json'} as {REQ_GUIDE} describes.")
+    else:
+        print(f"  2. Requirements: give each requests_NN.md in {run} to its own subagent (or do them in order). Each "
+              f"writes {parts}/req_NN.json with the same NN ({REQ_GUIDE}).")
     if gs["explain_groups"] > 1:
-        print(f"  2. Explanations: give each group in {pack} to its own subagent (or do them one by one). Each writes "
+        print(f"  3. Explanations: give each group in {pack} to its own subagent (or do them one by one). Each writes "
               f"the {parts}/explain_NN.json named in its heading, as {EXPLAIN_GUIDE} describes.")
     else:
-        print(f"  2. Explanations: read {pack} and the files it lists; write {run / 'explain.json'} as "
+        print(f"  3. Explanations: read {pack} and the files it lists; write {run / 'explain.json'} as "
               f"{EXPLAIN_GUIDE} describes.")
-    if len(m["packs"]) > 1 or gs["explain_groups"] > 1:
+    if len(m["packs"]) > 1 or gs["explain_groups"] > 1 or len(q["packs"]) > 1:
         print("Merge the parts:")
         print("  " + cmd("merge", "--project", root))
     print("Then run:")
@@ -189,11 +208,12 @@ def do_merge(args) -> int:
     parts_dir = Path(args.parts_dir) if args.parts_dir else run / "parts"
     ledger_files = sorted(parts_dir.glob("part_*.json"))
     explain_files = sorted(parts_dir.glob("explain_*.json"))
-    if not ledger_files and not explain_files:
-        print(f"error: no part_*.json or explain_*.json files in {parts_dir}")
+    req_files = sorted(parts_dir.glob("req_*.json"))
+    if not ledger_files and not explain_files and not req_files:
+        print(f"error: no part_*.json, explain_*.json or req_*.json files in {parts_dir}")
         return 2
     docs = {}
-    for f in ledger_files + explain_files:
+    for f in ledger_files + explain_files + req_files:
         try:
             docs[f] = load_json(f)
         except json.JSONDecodeError as exc:
@@ -221,6 +241,17 @@ def do_merge(args) -> int:
         write_json(run / "explain.json", exp)
         dup = f"; explained twice, kept the first: {', '.join(exp['duplicates'])}" if exp["duplicates"] else ""
         print(f"Merged {len(explain_files)} explanation parts: {len(exp['files'])} files{dup} → {run / 'explain.json'}")
+    if req_files:
+        try:
+            req = requirements.merge([docs[f] for f in req_files])
+        except requirements.RequirementsError as exc:
+            print(f"The requirement parts do not match the requirements.json format ({REQ_GUIDE}):")
+            for problem in exc.problems:
+                print("  -", problem)
+            return 2
+        write_json(run / "requirements.json", req)
+        print(f"Merged {len(req_files)} requirement parts: {len(req['requirements'])} requirements → "
+              f"{run / 'requirements.json'}")
     if ledger_files:
         print(f"NEXT: add map, access and paths from the code ({GUIDE}), then run:")
     else:
@@ -254,6 +285,9 @@ def do_check(args) -> int:
     for line in verify.summary_lines(out):
         print(line)
     code = _check_explain(args, root, run, index)
+    if code:
+        return code
+    code = _check_requirements(args, root, run)
     if code:
         return code
     print("NEXT: if a quote, snippet or function line failed only because it was mis-copied, fix it from the real "
@@ -296,6 +330,44 @@ def _check_explain(args, root: Path, run: Path, index: dict) -> int:
     return 0
 
 
+def _check_requirements(args, root: Path, run: Path) -> int:
+    verified = run / "requirements.verified.json"
+    verified.unlink(missing_ok=True)
+    manifest = load_json(run / "run.json")
+    if "requests" not in manifest:  # a run started before requirement coverage existed
+        return 0
+    if not manifest["requests"]["messages"]:
+        print("Requirements: no user messages in the conversations, so there is nothing to check.")
+        return 0
+    again = "  " + cmd("check", "--project", root)
+    path = Path(args.requirements) if args.requirements else run / "requirements.json"
+    if not path.exists():
+        print(f"error: {path} does not exist yet. The 需求对照 / Your asks tab needs it: write it from the "
+              f"requests_NN.md files in {run} as {REQ_GUIDE} describes (or merge parts/req_NN.json), then run:\n{again}")
+        return 2
+    try:
+        doc = load_json(path)
+    except json.JSONDecodeError as exc:
+        print(f"error: {path} is not valid JSON: {exc}")
+        return 2
+    recs = [obj for _, obj in read_jsonl(run / "digest.jsonl") if obj]
+    try:
+        out = requirements.verify(doc, recs, root, load_json(run / "probes.json"))
+    except requirements.RequirementsError as exc:
+        print(f"{path.name} does not match the format ({REQ_GUIDE}):")
+        for problem in exc.problems:
+            print("  -", problem)
+        print("NEXT: fix these, then run:\n" + again)
+        return 2
+    write_json(verified, out)
+    for line in requirements.summary_lines(out):
+        print(line)
+    if out["coverage"]["unaccounted"]:
+        print("Every user message should be a requirement's source or listed under skipped; the ones above are "
+              "neither. Add them, or leave them: the report lists them as unaccounted.")
+    return 0
+
+
 def _compare_problem(prev: Path, run: Path, manifest: dict) -> str | None:
     """Why `prev` cannot be compared with `run`, or None."""
     if not all((prev / name).is_file() for name in run_diff.NEEDED):
@@ -335,9 +407,20 @@ def do_render(args) -> int:
         else:
             changes = run_diff.compare(prev, run, lang)
             print(run_diff.summary_line(changes, lang))
+    req_doc = None
+    if "requests" in manifest:
+        if manifest["requests"]["messages"]:
+            if not (run / "requirements.verified.json").exists():
+                print("error: run check first; it has to pass for requirements.json too:\n  "
+                      + cmd("check", "--project", root))
+                return 2
+            req_doc = load_json(run / "requirements.verified.json")
+        else:
+            req_doc = {"requirements": [], "none": True, "threads": manifest.get("sessions", {}).get("threads", 0)}
     data = graph_page.page_data(load_json(run / "graph.json"), load_json(explained), ledger_doc, probes_doc, root,
-                                lang, bool(manifest.get("sessions", {}).get("records")), diff=changes)
-    html = render.render_html(ledger_doc, manifest, probes_doc, lang, graph_data=data)
+                                lang, bool(manifest.get("sessions", {}).get("records")), diff=changes,
+                                requirements=req_doc)
+    html = render.render_html(ledger_doc, manifest, probes_doc, lang, graph_data=data, requirements=req_doc)
     out = render.deliver(html, run, manifest["project_name"], args.out_dir)
     manifest["report_path"] = str(out)
     write_json(run / "run.json", manifest)
@@ -363,7 +446,8 @@ def do_shot(args) -> int:
     explained = run / "explain.verified.json"
     journeys = load_json(explained).get("journeys", []) if explained.exists() else []
     paths = shot.take_shots(Path(report), run / "shots", chrome, select=top,
-                            journey=journeys[0]["id"] if journeys else None)
+                            journey=journeys[0]["id"] if journeys else None,
+                            requirements="requests" in load_json(run / "run.json"))
     for p in paths:
         print(f"Screenshot: {p}")
     if not paths:
@@ -373,6 +457,7 @@ def do_shot(args) -> int:
     ok = _print_layout(shot.layout_report(shot.dump_dom(chrome, url)), top)
     print("NEXT: open every screenshot and check: the flowchart reads left to right and no cards overlap; the "
           "selected file's panel explains it; a journey shows numbered steps that follow the route; the overview diagrams are readable and the counts match the ledger; "
+          "the requirements tab (requirements.png) lists the user's asks grouped by area with counts that match check; "
           "the phone view has no text running off the edge. Fix and re-render if not.")
     return 0 if ok else 1
 
@@ -429,13 +514,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--lang", choices=("zh", "en"))
     p.add_argument("--claude-dir")
     p.add_argument("--codex-dir")
-    p = sub.add_parser("merge", help="merge chunk ledgers into ledger.json")
+    p = sub.add_parser("merge", help="merge part files into ledger.json, explain.json and requirements.json")
     p.add_argument("--project", required=True)
     p.add_argument("--parts-dir")
     p = sub.add_parser("check", help="verify ledger.json")
     p.add_argument("--project", required=True)
     p.add_argument("--ledger")
     p.add_argument("--explain")
+    p.add_argument("--requirements")
     p = sub.add_parser("render", help="write the HTML report")
     p.add_argument("--project", required=True)
     p.add_argument("--lang", choices=("zh", "en"))

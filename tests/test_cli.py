@@ -75,6 +75,7 @@ def test_start_prints_runnable_next_commands_for_unusual_path(env, capsys):
     check = next(c for c in cmds if "check" in c)
     (vl.latest_run(app) / "ledger.json").write_text(json.dumps(minimal_ledger(uid), ensure_ascii=False), encoding="utf-8")
     (vl.latest_run(app) / "explain.json").write_text(json.dumps(EMPTY_EXPLAIN), encoding="utf-8")
+    (vl.latest_run(app) / "requirements.json").write_text(json.dumps({"evidence": {}, "requirements": []}), encoding="utf-8")
     res = subprocess.run([sys.executable] + check[1:], capture_output=True, text=True)
     assert res.returncode == 0, res.stdout + res.stderr
     assert (vl.latest_run(app) / "ledger.verified.json").exists()
@@ -169,6 +170,7 @@ def test_shot_without_chrome_says_so(env, capsys, monkeypatch):
     vl.main(["start", "--project", str(app)])
     (vl.latest_run(app) / "ledger.json").write_text(json.dumps(minimal_ledger(uid), ensure_ascii=False), encoding="utf-8")
     (vl.latest_run(app) / "explain.json").write_text(json.dumps(EMPTY_EXPLAIN), encoding="utf-8")
+    (vl.latest_run(app) / "requirements.json").write_text(json.dumps({"evidence": {}, "requirements": []}), encoding="utf-8")
     vl.main(["check", "--project", str(app)])
     vl.main(["render", "--project", str(app)])
     import shot

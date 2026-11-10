@@ -13,6 +13,7 @@ from ledger_report.graph_page import dagre_source, data_script, render_graph_tab
 from ledger_report.i18n import t
 from ledger_report.map_svg import render_map
 from ledger_report.paths_svg import render_paths
+from ledger_report.requirements_html import render_requirements
 from ledger_report.timeline_svg import render_timeline
 from redact import find_secrets
 
@@ -180,7 +181,8 @@ def assert_no_secrets(doc: str) -> None:
         raise RuntimeError(f"refusing to write the report: it would contain {len(leaks)} unmasked secret(s) ({kinds})")
 
 
-def render_html(ledger: dict, run: dict, probes: dict, lang: str, graph_data: dict | None = None) -> str:
+def render_html(ledger: dict, run: dict, probes: dict, lang: str, graph_data: dict | None = None,
+                requirements: dict | None = None) -> str:
     ev = ledger["evidence"]
     c = counts(ledger)
     s = run.get("sessions", {})
@@ -215,6 +217,8 @@ def render_html(ledger: dict, run: dict, probes: dict, lang: str, graph_data: di
     css = (ASSETS / "report.css").read_text(encoding="utf-8")
     if tabbed:
         css += "\n" + (ASSETS / "graph.css").read_text(encoding="utf-8")
+        if requirements is not None:
+            css += "\n" + (ASSETS / "requirements.css").read_text(encoding="utf-8")
     js = (ASSETS / "report.js").read_text(encoding="utf-8")
     html_lang = "zh-CN" if lang == "zh" else "en"
     head = (f'<!doctype html><html lang="{html_lang}"><head><meta charset="utf-8">'
@@ -224,14 +228,18 @@ def render_html(ledger: dict, run: dict, probes: dict, lang: str, graph_data: di
         doc = head + f'<body><div class="wrap">{"".join(body)}</div><script>{js}</script></body></html>'
         assert_no_secrets(doc)
         return doc
+    names = (("graph", "g_tab_graph"),) + ((("requirements", "r_tab"),) if requirements is not None else ()) + (
+        ("overview", "g_tab_overview"),)
     tabs = "".join(f'<button type="button" class="vl-tab{" on" if key == "graph" else ""}" data-tab="{key}">{h(t(lang, label))}</button>'
-                   for key, label in (("graph", "g_tab_graph"), ("overview", "g_tab_overview")))
+                   for key, label in names)
+    req_tab = ("" if requirements is None else
+               f'<section id="tab-requirements" class="vl-tabpanel" hidden>{render_requirements(requirements, lang)}</section>')
     top = (f'<header class="vl-top">{title}<nav class="vl-tabs">{tabs}</nav>'
            f'<input id="vlg-search" type="search" list="vlg-files" placeholder="{h(t(lang, "g_search"))}" autocomplete="off">'
            f'<datalist id="vlg-files"></datalist>{toggle}</header>')
     gjs = (ASSETS / "graph.js").read_text(encoding="utf-8")
     doc = (head + f'<body class="tabbed">{top}<section id="tab-graph" class="vl-tabpanel">{render_graph_tab(lang)}</section>'
-           f'<section id="tab-overview" class="vl-tabpanel" hidden><div class="wrap">{"".join(body)}</div></section>'
+           f'{req_tab}<section id="tab-overview" class="vl-tabpanel" hidden><div class="wrap">{"".join(body)}</div></section>'
            f'{data_script(graph_data)}<script>{js}</script>{DAGRE_SLOT}<script>{gjs}</script></body></html>')
     assert_no_secrets(doc)  # the vendored library is static, so it goes in after the check
     return doc.replace(DAGRE_SLOT, "<script>" + dagre_source() + "</script>", 1)
