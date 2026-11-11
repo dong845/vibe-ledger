@@ -1,12 +1,14 @@
 # vibe-ledger
 
-<p align="center"><strong>English</strong> · <a href="README_CN.md">简体中文</a> · <a href="https://clawhub.ai/dong845/skills/vibe-ledger">ClawHub</a> · <a href="https://skillhub.cn/skills/user_f486c577/vibe-ledger">SkillHub</a></p>
+<p align="center"><strong>English</strong> · <a href="README_CN.md">简体中文</a></p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
   <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude_Code-plugin-5b5bd6">
   <img alt="Reads Claude Code and Codex conversations" src="https://img.shields.io/badge/reads-Claude_Code_%2B_Codex-111827">
   <img alt="Runs locally" src="https://img.shields.io/badge/runs-locally-0f766e">
+  <a href="https://clawhub.ai/dong845/skills/vibe-ledger"><img alt="On ClawHub" src="https://img.shields.io/badge/ClawHub-vibe--ledger-e8590c"></a>
+  <a href="https://skillhub.cn/skills/user_f486c577/vibe-ledger"><img alt="On SkillHub" src="https://img.shields.io/badge/SkillHub-vibe--ledger-2563eb"></a>
 </p>
 
 You built an app by talking to an AI. vibe-ledger reads those conversations (Claude Code and Codex) and the code they produced, and gives you one offline page that answers three things: **what your app is made of, whether the AI built what you asked for, and where it could hurt you.** Every conclusion carries evidence a script has checked; anything it cannot check shows as ❓, never as fact.

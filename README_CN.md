@@ -1,12 +1,14 @@
 # vibe-ledger
 
-<p align="center"><a href="README.md">English</a> · <strong>简体中文</strong> · <a href="https://clawhub.ai/dong845/skills/vibe-ledger">ClawHub</a> · <a href="https://skillhub.cn/skills/user_f486c577/vibe-ledger">SkillHub</a></p>
+<p align="center"><a href="README.md">English</a> · <strong>简体中文</strong></p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
   <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude_Code-plugin-5b5bd6">
   <img alt="读取 Claude Code 和 Codex 对话" src="https://img.shields.io/badge/reads-Claude_Code_%2B_Codex-111827">
   <img alt="只在本机运行" src="https://img.shields.io/badge/runs-locally-0f766e">
+  <a href="https://clawhub.ai/dong845/skills/vibe-ledger"><img alt="ClawHub 上架" src="https://img.shields.io/badge/ClawHub-vibe--ledger-e8590c"></a>
+  <a href="https://skillhub.cn/skills/user_f486c577/vibe-ledger"><img alt="SkillHub 上架" src="https://img.shields.io/badge/SkillHub-vibe--ledger-2563eb"></a>
 </p>
 
 你靠和 AI 对话做出了一个应用，却看不懂它，也说不准 AI 有没有按你的要求做。vibe-ledger 读取你和 AI 的对话（Claude Code、Codex）以及现在的代码，生成一份离线网页，回答三件事：**这个应用由什么组成，AI 有没有做成你要的样子，哪里可能坑到你。** 每个结论都带着脚本核对过的证据；核对不了的标 ❓，不会当成事实。
