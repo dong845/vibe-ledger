@@ -12,7 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, Iterator
 
-__version__ = "0.3.0"
+__version__ = "1.0.0"
 
 _WS = re.compile(r"\s+")
 

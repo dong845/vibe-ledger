@@ -138,3 +138,16 @@ def test_without_conversations_the_report_does_not_claim_zero_problems():
     html = render.render_html(led, run, PROBES, "zh")
     assert "没做到 <b>0</b>" not in html and 'class="counts"' not in html
     assert "0 条承诺没做到" not in html and "没有对话记录，这一问无法回答" in html
+
+
+def test_english_counts_take_the_singular_for_one():
+    from pathlib import Path
+    from ledger_report.i18n import STR, t
+    assert t("en", "g_area_row", n=1) == "1 file" and t("en", "g_area_row", n=2) == "2 files"
+    assert t("en", "g_badge_warn", n=1) == "1 hint" and t("en", "g_badge_warn", n=0) == "0 hints"
+    one = t("en", "r_summary", n=1, messages=1, skipped=1)
+    assert one.startswith("1 requirement from your 1 message; 1 more was a confirmation"), one
+    assert t("zh", "g_area_row", n=1) == "1 个文件"
+    assert not any("|" in v and "{" in v for v in STR["zh"].values() if isinstance(v, str))
+    js = (Path(__file__).resolve().parents[1] / "scripts/ledger_report/assets/graph.js").read_text(encoding="utf-8")
+    assert "one : many" in js  # graph.js formats the same "{n|one|many}" token

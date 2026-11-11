@@ -45,7 +45,10 @@
   (data.journeys || []).forEach(function (j) { journeyById[j.id] = j; });
   var pointers = {}, drag = null, pinch = null, moved = false;
 
-  function fmt(s, kv) { return String(s).replace(/\{(\w+)\}/g, function (_, k) { return kv[k] == null ? "" : kv[k]; }); }
+  function fmt(s, kv) {  // "{n|file|files}" picks the word for one or for others (same rule as i18n.t)
+    return String(s).replace(/\{(\w+)\|([^|{}]*)\|([^{}]*)\}/g, function (_, k, one, many) { return kv[k] === 1 ? one : many; })
+      .replace(/\{(\w+)\}/g, function (_, k) { return kv[k] == null ? "" : kv[k]; });
+  }
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function sv(tag, attrs) { var e = document.createElementNS(NS, tag); Object.keys(attrs || {}).forEach(function (k) { e.setAttribute(k, attrs[k]); }); return e; }
   function units(s) { var n = 0; for (var i = 0; i < s.length; i++) n += s.charCodeAt(i) > 0x2e80 ? 2 : 1; return n; }
@@ -268,9 +271,12 @@
       var carries = mode === "map" && e.carries && e.carries.length ? e.carries.slice(0, 2).join(" · ") + (e.carries.length > 2 ? " …" : "")
         : mode === "data" && !AREAS && (data.data_flow.labels || {})[e.from + "\u0001" + e.to];
       if (carries) {  // what this link sends, from the verified app map
+        // two parts sending data both ways share one line: each label takes its own side of it, not the middle
+        var back = layout.edges[e.to + "\u0001" + e.from], twoWay = mode === "map" && back && back.carries && back.carries.length,
+          side = e.from < e.to ? -1 : 1;
         var c = mode === "map"
-          ? sv("text", { x: mid.x.toFixed(1), y: (mid.y - 6).toFixed(1), "class": "vlg-edge-label carries", "text-anchor": "middle",
-              "data-from": e.from, "data-to": e.to })
+          ? sv("text", { x: (mid.x + (twoWay ? side * 10 : 0)).toFixed(1), y: (mid.y - 6).toFixed(1), "class": "vlg-edge-label carries",
+              "text-anchor": twoWay ? (side < 0 ? "end" : "start") : "middle", "data-from": e.from, "data-to": e.to })
           : sv("text", { x: (ends[1].x - 10).toFixed(1), y: (ends[1].y - 7).toFixed(1), "class": "vlg-edge-label carries",
               "text-anchor": "end", "data-from": e.from, "data-to": e.to });
         c.textContent = carries;

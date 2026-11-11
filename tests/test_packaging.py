@@ -29,3 +29,14 @@ def test_manifest_shape():
 def test_readme_and_license_exist():
     readme = (REPO / "README.md").read_text(encoding="utf-8")
     assert "vl.py start" in readme and "MIT" in (REPO / "LICENSE").read_text(encoding="utf-8")
+
+
+def test_readmes_link_each_other_and_show_their_own_screenshots():
+    en = (REPO / "README.md").read_text(encoding="utf-8")
+    zh = (REPO / "README_CN.md").read_text(encoding="utf-8")
+    assert 'href="README_CN.md"' in en and 'href="README.md"' in zh
+    for text in (en, zh):
+        for img in __import__("re").findall(r'src="(docs/[^"]+)"', text):
+            assert (REPO / img).is_file(), img
+    assert "docs/assets/map-zh.png" in zh and "docs/assets/map.png" in en
+    assert "/plugin install vibe-ledger@vibe-ledger" in en and "/plugin install vibe-ledger@vibe-ledger" in zh

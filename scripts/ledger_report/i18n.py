@@ -207,7 +207,7 @@ STR = {
         "g_role_entry": "Entry", "g_role_logic": "Logic", "g_role_data": "Data", "g_role_paid": "Paid service", "g_role_folder": "Folder",
         "g_legend_bad": "red = has problems", "g_legend_warn": "amber = hints only", "g_legend_paid": "✦ = charges per use",
         "g_legend_folder": "dashed = collapsed folder",
-        "g_badge_bad": "{n} problems", "g_badge_warn": "{n} hints",
+        "g_badge_bad": "{n} {n|problem|problems}", "g_badge_warn": "{n} {n|hint|hints}",
         "g_summary": "{files} files, {entries} entry points, reaching {ext} outside services ({paid} charge per use).",
         "g_howto_1": "Read left to right: entry → logic → data & outside; an arrow means \"calls\".",
         "g_howto_2": "Click a file to read what it does; its callers and callees stay sharp, the rest fades.",
@@ -218,18 +218,18 @@ STR = {
         "g_history": "History", "g_no_history_tx": "No conversations were found", "g_no_history": "No conversation touched this file",
         "g_edits": "Changed {count} times in the conversations ({first} to {last})",
         "g_no_explain": "No detailed explanation yet; this is the automatic summary.", "g_unverified": "Unverified: {ids} not found in the project",
-        "g_auto_entry": "This is an entry point ({reason}).", "g_auto_exports": "Provides {n} names: {names}.",
-        "g_auto_noexports": "Provides no functions.", "g_auto_used": "Used by {n} files.",
-        "g_auto_external": "{label}: {n} files in the project reach it.",
-        "g_folder_files": "{n} files · click to open", "g_folder_members": "Files inside", "g_collapse": "Collapse this folder",
-        "g_lines": "{n} lines", "g_in_overview": "See in Overview", "g_where": "Where in the code", "g_close": "Close",
+        "g_auto_entry": "This is an entry point ({reason}).", "g_auto_exports": "Provides {n} {n|name|names}: {names}.",
+        "g_auto_noexports": "Provides no functions.", "g_auto_used": "Used by {n} {n|file|files}.",
+        "g_auto_external": "{label}: {n} {n|file|files} in the project {n|reaches|reach} it.",
+        "g_folder_files": "{n} {n|file|files} · click to open", "g_folder_members": "Files inside", "g_collapse": "Collapse this folder",
+        "g_lines": "{n} {n|line|lines}", "g_in_overview": "See in Overview", "g_where": "Where in the code", "g_close": "Close",
         "g_compromise": "Workaround after an error", "g_dev_snippet": "Code",
         "g_no_files": "No JS/TS or Python files were found in this project, so the flowchart is empty.",
-        "g_merged": "{n} imports",
-        "g_journeys": "What happens when you…", "g_journey_steps": "{n} steps", "g_position": "Where it fits",
+        "g_merged": "{n} {n|import|imports}",
+        "g_journeys": "What happens when you…", "g_journey_steps": "{n} {n|step|steps}", "g_position": "Where it fits",
         "g_position_step": "{title} — step {k} of {n}: {plain}", "g_position_none": "This file is not on any of the routes written for this project.",
         "g_open_journey": "Show this route", "g_journey_outcome": "In the end: {outcome}", "g_back": "Back to overview",
-        "g_unlinked": "No direct import links this step to the one before", "g_skip": "Skip to the explanation panel", "g_exports_n": "{n} exports", "g_dev_note": "Technical note",
+        "g_unlinked": "No direct import links this step to the one before", "g_skip": "Skip to the explanation panel", "g_exports_n": "{n} {n|export|exports}", "g_dev_note": "Technical note",
         "g_mode_files": "Files", "g_mode_modules": "Modules", "g_mode_data": "Data flow",
         "g_modules_hint": "Each box is a module (a folder); the number on a link is how many imports it stands for. Click a module to open it in place.",
         "g_data_hint": "Only the files on a path from an entry to a data store or outside service; a link says what it sends (from the verified app map in the overview).",
@@ -255,7 +255,7 @@ STR = {
         "cov_explain_dropped": "{n} parts of the file explanations failed the checks and were left out of the panel:",
         "g_support": "Shared parts (no data passes through them; the others call them)",
         "g_mode_map": "Map", "g_mode_flow": "Data flow", "g_areas_title": "What this project is made of",
-        "g_area_sub": "{n} files · {plain}", "g_area_row": "{n} files",
+        "g_area_sub": "{n} {n|file|files} · {plain}", "g_area_row": "{n} {n|file|files}",
         "g_area_other_name": "Other", "g_area_other_plain": "Files no area claims",
         "g_area_of": "Part of “{name}”: {plain}",
         "g_map_hint": "Each box is one part of the project; click it to open its files in place. A link says what data passes between two parts (dashed = only through that data, no direct call), or how many calls it stands for.",
@@ -269,7 +269,7 @@ STR = {
         "r_intro": "Every requirement you gave in the conversations, checked one by one against the code as it is now. Each verdict carries checked evidence; what could not be checked shows ❓.",
         "r_status_done": "Done", "r_status_partial": "Partly done", "r_status_missing": "Not done",
         "r_status_changed": "Done differently", "r_status_superseded": "You changed your mind", "r_status_unknown": "Can't tell",
-        "r_summary": "{n} requirements from your {messages} messages; {skipped} more were confirmations, process instructions or questions.",
+        "r_summary": "{n} {n|requirement|requirements} from your {messages} {messages|message|messages}; {skipped} more {skipped|was a confirmation, process instruction or question|were confirmations, process instructions or questions}.",
         "r_summary_unaccounted": " {n} messages are not accounted for (listed at the bottom).",
         "r_filter_problems": "Problems only",
         "r_changed_to": "What was built instead: {text}", "r_agreed": "You agreed to this change · {date}",
@@ -281,20 +281,25 @@ STR = {
         "r_cov_title": "What this page does not cover",
         "r_cov_messages": "You sent {n} messages; {cited} of them are the source of a requirement",
         "r_cov_skipped": "Not counted as requirements: {parts}",
-        "r_skip_ack": "{n} confirmations", "r_skip_process": "{n} process instructions (push, check, status…)",
-        "r_skip_question": "{n} questions", "r_skip_not_project": "{n} about something else",
+        "r_skip_ack": "{n} {n|confirmation|confirmations}", "r_skip_process": "{n} process {n|instruction|instructions} (push, check, status…)",
+        "r_skip_question": "{n} {n|question|questions}", "r_skip_not_project": "{n} about something else",
         "r_cov_noise": "{n} more were written by the tool itself (such as interruption notes) and are not counted",
         "r_cov_unaccounted": "{n} messages are neither a requirement nor skipped with a reason — a requirement may be missing here:",
         "r_cov_rejected": "{n} requirements failed the checks (the quote was not found, or you did not say it) and are not listed:",
         "g_requirements": "What you asked about this file", "g_req_title": "Your asks", "g_req_open": "Open Your asks",
-        "g_req_unaccounted": "{n} messages not accounted for",
+        "g_req_unaccounted": "{n} {n|message|messages} not accounted for",
     },
 }
 
 
+PLURAL = re.compile(r"\{(\w+)\|([^|{}]*)\|([^{}]*)\}")  # "{n|file|files}": the word for one, the word for others
+
+
 def t(lang: str, key: str, **kw) -> str:
     text = STR.get(lang, STR["en"]).get(key, STR["en"][key])
-    return text.format(**kw) if kw else text
+    if not kw:
+        return text
+    return PLURAL.sub(lambda m: m.group(2) if kw.get(m.group(1)) == 1 else m.group(3), text).format(**kw)
 
 
 _CREDENTIALS_EN = ", and it also accepts the visitor's cookies and credentials"
