@@ -1,6 +1,6 @@
 # vibe-ledger
 
-<p align="center"><a href="README.md">English</a> · <strong>简体中文</strong></p>
+<p align="center"><a href="README.md">English</a> · <strong>简体中文</strong> · <a href="https://clawhub.ai/dong845/skills/vibe-ledger">ClawHub</a> · <a href="https://skillhub.cn/skills/user_f486c577/vibe-ledger">SkillHub</a></p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
@@ -37,6 +37,8 @@
 /plugin marketplace add dong845/vibe-ledger
 /plugin install vibe-ledger@vibe-ledger
 ```
+
+也可以从技能市场安装：[ClawHub](https://clawhub.ai/dong845/skills/vibe-ledger) · [SkillHub](https://skillhub.cn/skills/user_f486c577/vibe-ledger)。
 
 或者作为普通 skill 文件夹：
 

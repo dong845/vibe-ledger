@@ -1,6 +1,6 @@
 # vibe-ledger
 
-<p align="center"><strong>English</strong> · <a href="README_CN.md">简体中文</a></p>
+<p align="center"><strong>English</strong> · <a href="README_CN.md">简体中文</a> · <a href="https://clawhub.ai/dong845/skills/vibe-ledger">ClawHub</a> · <a href="https://skillhub.cn/skills/user_f486c577/vibe-ledger">SkillHub</a></p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
@@ -37,6 +37,8 @@ As a Claude Code plugin:
 /plugin marketplace add dong845/vibe-ledger
 /plugin install vibe-ledger@vibe-ledger
 ```
+
+Or from a skill hub: [ClawHub](https://clawhub.ai/dong845/skills/vibe-ledger) · [SkillHub](https://skillhub.cn/skills/user_f486c577/vibe-ledger).
 
 Or as a plain skill folder:
 
